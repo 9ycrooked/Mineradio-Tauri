@@ -1,6 +1,14 @@
 import type * as THREE from "three";
 import type { AudioSnapshot } from "../audio/audio-snapshot";
 import type { FrameContext } from "./frame-context";
+import {
+	FOCUS_ZONE_ACTIVATE_DELAY_MS,
+	FOCUS_ZONE_EXIT_DELAY_MS,
+	FOCUS_ZONE_QUEUE_EXIT_DELAY_MS,
+	focusTargetForZone,
+	type FocusZoneOptions,
+	type FocusZoneType,
+} from "./focus-zone";
 
 export interface CinemaProfile {
 	cinema: boolean;
@@ -13,6 +21,7 @@ export interface CinemaCameraOptions {
 	camera: THREE.PerspectiveCamera;
 	getCurrentTime?: () => number;
 	defaultProfile?: CinemaProfile;
+	focusTimers?: FocusTimers;
 }
 
 export interface CinemaState {
@@ -90,6 +99,7 @@ export interface OrbitState {
 	centerLocked: boolean;
 	focus: {
 		active: boolean;
+		type: FocusZoneType | null;
 		theta: number;
 		phi: number;
 		radius: number;
@@ -101,10 +111,20 @@ export interface OrbitState {
 export interface CinemaCamera {
 	update(ctx: FrameContext): void;
 	applyBeat(burst: number, isScheduled: boolean): void;
+	setFocusZone(type: FocusZoneType | null, opts?: SetFocusZoneOptions): void;
 	setProfile(profile: CinemaProfile): void;
 	getProfile(): CinemaProfile;
 	getState(): CinemaState;
 	dispose(): void;
+}
+
+export interface FocusTimers {
+	setTimeout(fn: () => void, delayMs: number): unknown;
+	clearTimeout(id: unknown): void;
+}
+
+export interface SetFocusZoneOptions extends FocusZoneOptions {
+	immediate?: boolean;
 }
 
 const BASE_FOV = 45;
@@ -151,6 +171,7 @@ export function createCinemaCamera(opts: CinemaCameraOptions): CinemaCamera {
 		centerLocked: false,
 		focus: {
 			active: false,
+			type: null,
 			theta: 0.0,
 			phi: 0.08,
 			radius: 6.6,
@@ -188,6 +209,14 @@ export function createCinemaCamera(opts: CinemaCameraOptions): CinemaCamera {
 	const CAM_PUNCH_MIN_INTERVAL = 0.45;
 	const CAM_PUNCH_BEAT_THRESHOLD = 0.55;
 	let disposed = false;
+	const focusTimers: FocusTimers = opts.focusTimers ?? {
+		setTimeout: (fn, delayMs) => setTimeout(fn, delayMs),
+		clearTimeout: (id) => clearTimeout(id as ReturnType<typeof setTimeout>),
+	};
+	let focusWantType: FocusZoneType | null = null;
+	let focusWantKey = "";
+	let focusPendingTimer: unknown = null;
+	let focusExitTimer: unknown = null;
 
 	function getNow(ctx: FrameContext): number {
 		return opts.getCurrentTime ? opts.getCurrentTime() : ctx.now / 1000;
@@ -364,7 +393,7 @@ export function createCinemaCamera(opts: CinemaCameraOptions): CinemaCamera {
 			orbit.lookAt.y + orbit.radius * sy,
 			orbit.lookAt.z + orbit.radius * cy * ct,
 		);
-		camera.lookAt(orbit.lookAt as unknown as THREE.Vector3);
+		camera.lookAt(orbit.lookAt.x, orbit.lookAt.y, orbit.lookAt.z);
 		const cameraShake = clampRange(Number(profile.cinemaShake) || 0, 0, 1.8);
 		camera.rotation.z += beatCam.rollKick * cameraShake;
 		const cameraPunch = Math.max(camPunch * 0.55, beatCam.punch * 0.54 + beatCam.radiusKick * 0.16) * cameraShake;
@@ -373,6 +402,65 @@ export function createCinemaCamera(opts: CinemaCameraOptions): CinemaCamera {
 		camera.fov += (targetFOV - camera.fov) * fovEase;
 		camera.updateProjectionMatrix();
 		camPunch *= 0.86;
+	}
+
+	function clearFocusPendingTimer(): void {
+		if (focusPendingTimer == null) return;
+		focusTimers.clearTimeout(focusPendingTimer);
+		focusPendingTimer = null;
+	}
+
+	function clearFocusExitTimer(): void {
+		if (focusExitTimer == null) return;
+		focusTimers.clearTimeout(focusExitTimer);
+		focusExitTimer = null;
+	}
+
+	function activateFocusZone(type: FocusZoneType, zoneOpts: FocusZoneOptions = {}): void {
+		if (disposed) return;
+		const target = focusTargetForZone(type, zoneOpts);
+		orbit.centerLocked = false;
+		orbit.focus.active = true;
+		orbit.focus.type = type;
+		orbit.focus.theta = target.theta;
+		orbit.focus.phi = target.phi;
+		orbit.focus.radius = target.radius;
+		orbit.focus.lookAt = { ...target.lookAt };
+		camPunch = Math.max(camPunch, target.camPunch);
+	}
+
+	function setFocusZone(type: FocusZoneType | null, zoneOpts: SetFocusZoneOptions = {}): void {
+		if (disposed) return;
+		const focusKey = type
+			? `${type}:${zoneOpts.portrait ? 1 : 0}:${zoneOpts.wallpaperSafe ? 1 : 0}`
+			: "";
+		if (focusWantType === type && focusWantKey === focusKey && !zoneOpts.immediate) return;
+		focusWantType = type;
+		focusWantKey = focusKey;
+		clearFocusPendingTimer();
+		clearFocusExitTimer();
+		if (!type) {
+			const exitDelay = orbit.focus.type === "queue"
+				? FOCUS_ZONE_QUEUE_EXIT_DELAY_MS
+				: FOCUS_ZONE_EXIT_DELAY_MS;
+			focusExitTimer = focusTimers.setTimeout(() => {
+				focusExitTimer = null;
+				if (disposed) return;
+				if (!focusWantType) orbit.focus.active = false;
+			}, exitDelay);
+			return;
+		}
+		if (zoneOpts.immediate) {
+			activateFocusZone(type, zoneOpts);
+			return;
+		}
+		focusPendingTimer = focusTimers.setTimeout(() => {
+			focusPendingTimer = null;
+			if (disposed) return;
+			if (focusWantType !== type) return;
+			if (focusWantKey !== focusKey) return;
+			activateFocusZone(type, zoneOpts);
+		}, FOCUS_ZONE_ACTIVATE_DELAY_MS);
 	}
 
 	function scheduleBeatCamera(time: number, burst: number, isScheduled: boolean, snapshot: AudioSnapshot): void {
@@ -493,6 +581,7 @@ export function createCinemaCamera(opts: CinemaCameraOptions): CinemaCamera {
 			};
 			scheduleBeatCamera(now, burst, isScheduled, snapshot);
 		},
+		setFocusZone,
 		setProfile(next) {
 			profile.cinema = next.cinema;
 			profile.cinemaShake = next.cinemaShake;
@@ -514,6 +603,8 @@ export function createCinemaCamera(opts: CinemaCameraOptions): CinemaCamera {
 		},
 		dispose() {
 			disposed = true;
+			clearFocusPendingTimer();
+			clearFocusExitTimer();
 			beatCam.events.length = 0;
 		},
 	};

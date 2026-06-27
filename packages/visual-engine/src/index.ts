@@ -100,7 +100,20 @@ export type {
 	BeatCamState,
 	BeatCameraEvent,
 	OrbitState,
+	FocusTimers,
+	SetFocusZoneOptions,
 } from "./runtime/cinema-camera";
+export {
+	FOCUS_ZONE_ACTIVATE_DELAY_MS,
+	FOCUS_ZONE_EXIT_DELAY_MS,
+	FOCUS_ZONE_QUEUE_EXIT_DELAY_MS,
+	focusTargetForZone,
+} from "./runtime/focus-zone";
+export type {
+	FocusZoneOptions,
+	FocusZoneTarget,
+	FocusZoneType,
+} from "./runtime/focus-zone";
 export { createRuntimeUniforms } from "./runtime/uniforms";
 export type { RuntimeUniforms, UniformValue } from "./runtime/uniforms";
 export { RenderStepSlot, RENDER_STEP_ORDER } from "./runtime/render-step-slot";

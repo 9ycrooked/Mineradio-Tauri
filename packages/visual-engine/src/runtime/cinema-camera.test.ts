@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 import "./happy-dom-preload";
+import * as THREE from "three";
 import { createCinemaCamera } from "./cinema-camera";
+import { FOCUS_ZONE_ACTIVATE_DELAY_MS, FOCUS_ZONE_QUEUE_EXIT_DELAY_MS } from "./focus-zone";
 import type { AudioSnapshot } from "../audio/audio-snapshot";
 import type { RuntimeUniforms } from "./uniforms";
 import type { FrameContext } from "./frame-context";
@@ -165,5 +167,152 @@ test("setProfile toggling cinema=false freezes sine drift (cinePhi/Theta decay t
 	expect(Math.abs(cine.theta)).toBeLessThan(0.0005);
 	expect(Math.abs(cine.phi)).toBeLessThan(0.0005);
 	expect(Math.abs(cine.radius)).toBeLessThan(0.0005);
+	cinema.dispose();
+});
+
+test("setFocusZone(immediate) applies baseline shelf-side focus target and cam punch", () => {
+	const camera = makeFakeCamera();
+	const cinema = createCinemaCamera({
+		camera: camera as never,
+		defaultProfile: { cinema: true, cinemaShake: 1.0, isDj: false, trackScaleAuto: true },
+	});
+	cinema.setFocusZone("shelf-side", { immediate: true, portrait: false });
+	const state = cinema.getState();
+	expect(state.orbit.focus.active).toBe(true);
+	expect(state.orbit.focus.type).toBe("shelf-side");
+	expect(state.orbit.focus.theta).toBe(0.42);
+	expect(state.orbit.focus.phi).toBe(-0.12);
+	expect(state.orbit.focus.radius).toBe(4.20);
+	expect(state.orbit.focus.lookAt).toEqual({ x: 2.32, y: -0.10, z: 0.72 });
+	expect(state.cameraPunch).toBe(0.82);
+	cinema.dispose();
+});
+
+test("setFocusZone delayed activation and queue exit timing match baseline timers", () => {
+	const camera = makeFakeCamera();
+	let timerNow = 0;
+	const scheduled: Array<{ id: number; at: number; fn: () => void; cleared: boolean }> = [];
+	const timers = {
+		setTimeout(fn: () => void, delayMs: number) {
+			const item = { id: scheduled.length + 1, at: timerNow + delayMs, fn, cleared: false };
+			scheduled.push(item);
+			return item.id;
+		},
+		clearTimeout(id: number) {
+			const item = scheduled.find((entry) => entry.id === id);
+			if (item) item.cleared = true;
+		},
+	};
+	function advance(ms: number) {
+		timerNow += ms;
+		for (const item of scheduled) {
+			if (!item.cleared && item.at <= timerNow) {
+				item.cleared = true;
+				item.fn();
+			}
+		}
+	}
+	const cinema = createCinemaCamera({
+		camera: camera as never,
+		defaultProfile: { cinema: true, cinemaShake: 1.0, isDj: false, trackScaleAuto: true },
+		focusTimers: timers,
+	});
+	cinema.setFocusZone("shelf-stage");
+	expect(cinema.getState().orbit.focus.active).toBe(false);
+	advance(FOCUS_ZONE_ACTIVATE_DELAY_MS - 1);
+	expect(cinema.getState().orbit.focus.active).toBe(false);
+	advance(1);
+	expect(cinema.getState().orbit.focus.active).toBe(true);
+	expect(cinema.getState().orbit.focus.type).toBe("shelf-stage");
+
+	cinema.setFocusZone("queue", { immediate: true });
+	expect(cinema.getState().orbit.focus.type).toBe("queue");
+	cinema.setFocusZone(null);
+	advance(FOCUS_ZONE_QUEUE_EXIT_DELAY_MS - 1);
+	expect(cinema.getState().orbit.focus.active).toBe(true);
+	advance(1);
+	expect(cinema.getState().orbit.focus.active).toBe(false);
+	cinema.dispose();
+});
+
+test("setFocusZone same-type immediate and layout option changes replace pending focus target", () => {
+	const camera = makeFakeCamera();
+	let timerNow = 0;
+	const scheduled: Array<{ id: number; at: number; fn: () => void; cleared: boolean }> = [];
+	const timers = {
+		setTimeout(fn: () => void, delayMs: number) {
+			const item = { id: scheduled.length + 1, at: timerNow + delayMs, fn, cleared: false };
+			scheduled.push(item);
+			return item.id;
+		},
+		clearTimeout(id: number) {
+			const item = scheduled.find((entry) => entry.id === id);
+			if (item) item.cleared = true;
+		},
+	};
+	const cinema = createCinemaCamera({
+		camera: camera as never,
+		defaultProfile: { cinema: true, cinemaShake: 1.0, isDj: false, trackScaleAuto: true },
+		focusTimers: timers,
+	});
+	cinema.setFocusZone("shelf-side", { portrait: false });
+	cinema.setFocusZone("shelf-side", { immediate: true, portrait: true });
+	expect(cinema.getState().orbit.focus.active).toBe(true);
+	expect(cinema.getState().orbit.focus.radius).toBe(5.28);
+	expect(cinema.getState().orbit.focus.lookAt).toEqual({ x: 1.08, y: -0.18, z: 0.72 });
+	timerNow = FOCUS_ZONE_ACTIVATE_DELAY_MS;
+	for (const item of scheduled) {
+		if (!item.cleared && item.at <= timerNow) {
+			item.cleared = true;
+			item.fn();
+		}
+	}
+	expect(cinema.getState().orbit.focus.radius).toBe(5.28);
+
+	cinema.setFocusZone("shelf-side", { immediate: true, portrait: true, wallpaperSafe: true });
+	expect(cinema.getState().orbit.focus.radius).toBe(5.74);
+	expect(cinema.getState().orbit.focus.lookAt).toEqual({ x: 1.04, y: -0.08, z: 0.78 });
+	cinema.dispose();
+});
+
+test("setFocusZone is ignored after dispose and does not schedule timers", () => {
+	const camera = makeFakeCamera();
+	let scheduledCount = 0;
+	const timers = {
+		setTimeout(fn: () => void, delayMs: number) {
+			void fn;
+			void delayMs;
+			scheduledCount += 1;
+			return scheduledCount;
+		},
+		clearTimeout() {},
+	};
+	const cinema = createCinemaCamera({
+		camera: camera as never,
+		defaultProfile: { cinema: true, cinemaShake: 1.0, isDj: false, trackScaleAuto: true },
+		focusTimers: timers,
+	});
+	cinema.dispose();
+	cinema.setFocusZone("shelf-stage");
+	expect(scheduledCount).toBe(0);
+	expect(cinema.getState().orbit.focus.active).toBe(false);
+});
+
+test("focused real Three camera keeps finite position and quaternion after lookAt update", () => {
+	const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+	const cinema = createCinemaCamera({
+		camera,
+		defaultProfile: { cinema: true, cinemaShake: 1.0, isDj: false, trackScaleAuto: true },
+	});
+	cinema.setFocusZone("shelf-detail", { immediate: true, portrait: false });
+	const ctx = makeContext(makeSnapshot({ energy: 0.3, rb: 0.2 }), 1 / 60) as FrameContext;
+	cinema.update({ ...ctx, camera: camera as never });
+	expect(Number.isFinite(camera.position.x)).toBe(true);
+	expect(Number.isFinite(camera.position.y)).toBe(true);
+	expect(Number.isFinite(camera.position.z)).toBe(true);
+	expect(Number.isFinite(camera.quaternion.x)).toBe(true);
+	expect(Number.isFinite(camera.quaternion.y)).toBe(true);
+	expect(Number.isFinite(camera.quaternion.z)).toBe(true);
+	expect(Number.isFinite(camera.quaternion.w)).toBe(true);
 	cinema.dispose();
 });
