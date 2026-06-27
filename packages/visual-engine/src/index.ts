@@ -249,7 +249,7 @@ export {
 	smoothstep01,
 } from "./shelf/reveal";
 export { updateHoverFloatMix } from "./shelf/hover-float";
-export { createShelfManager } from "./shelf/shelf-animate";
+export { createShelfManager, createShelfManagerWithThree } from "./shelf/shelf-animate";
 export type {
 	ShelfItem,
 	ShelfManagerOptions,
@@ -257,3 +257,18 @@ export type {
 	ShelfManager,
 } from "./shelf/shelf-animate";
 export { createShelfStep, SHELF_RENDER_STEP_SLOT } from "./shelf/shelf-step";
+export {
+	SHELF_CARD_CANVAS_WIDTH,
+	SHELF_CARD_CANVAS_HEIGHT,
+	SHELF_CARD_GEOMETRY_WIDTH,
+	SHELF_CARD_GEOMETRY_HEIGHT,
+	createShelfCardMesh,
+	drawShelfCard,
+	makeShelfCardAction,
+} from "./shelf/shelf-card-sprite";
+export type {
+	ShelfCardAction,
+	ShelfCardDrawState,
+	ShelfCardSprite,
+	CreateShelfCardMeshOptions,
+} from "./shelf/shelf-card-sprite";

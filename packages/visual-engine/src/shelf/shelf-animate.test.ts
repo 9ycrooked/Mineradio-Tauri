@@ -3,6 +3,7 @@ import "../runtime/happy-dom-preload";
 import type { FrameContext } from "../runtime/frame-context";
 import type { RuntimeUniforms } from "../runtime/uniforms";
 import { createRuntimeUniforms } from "../runtime/uniforms";
+import { SHELF_MAX_RENDER } from "./card-position";
 import { createShelfManager, type ShelfManager } from "./shelf-animate";
 
 function makeCtx(uniforms: RuntimeUniforms, now = 0): FrameContext {
@@ -111,4 +112,296 @@ test("ShelfManager.dispose removes the group from the scene if present", () => {
 	const m = createShelfManager({ scene, group });
 	m.dispose();
 	expect(removed.length).toBe(1);
+});
+
+test("ShelfManager builds only SHELF_MAX_RENDER card meshes around center for long data", () => {
+	const children: unknown[] = [];
+	const scene = {
+		add() {},
+		remove() {},
+	} as unknown as import("three").Scene;
+	class FakeGroup {
+		visible = true;
+		children = children;
+		add(obj: unknown) {
+			children.push(obj);
+		}
+		remove(obj: unknown) {
+			const idx = children.indexOf(obj);
+			if (idx >= 0) children.splice(idx, 1);
+		}
+	}
+	class FakeMesh {
+		position = { set() {} };
+		rotation = { set() {} };
+		scale = { setScalar() {} };
+		visible = true;
+		renderOrder = 0;
+		userData: Record<string, unknown> = {};
+		constructor(
+			public geometry: unknown,
+			public material: unknown,
+		) {}
+	}
+	const documentLike = {
+		createElement(tag: string) {
+			expect(tag).toBe("canvas");
+			return {
+				width: 0,
+				height: 0,
+				getContext() {
+					return {
+						clearRect() {},
+						fillRect() {},
+						roundRect() {},
+						beginPath() {},
+						fill() {},
+						stroke() {},
+						moveTo() {},
+						lineTo() {},
+						save() {},
+						restore() {},
+						clip() {},
+						createLinearGradient() {
+							return { addColorStop() {} };
+						},
+						measureText(text: string) {
+							return { width: text.length * 8 };
+						},
+						fillText() {},
+					};
+				},
+			};
+		},
+	};
+	const three = {
+		Group: FakeGroup,
+		Mesh: FakeMesh,
+		PlaneGeometry: class {
+			constructor(
+				public width: number,
+				public height: number,
+			) {}
+		},
+		CanvasTexture: class {
+			needsUpdate = false;
+			minFilter: unknown = null;
+			magFilter: unknown = null;
+			generateMipmaps = true;
+			constructor(public canvas: unknown) {}
+		},
+		MeshBasicMaterial: class {
+			opacity = 1;
+			color = { setScalar() {} };
+			constructor(init: Record<string, unknown>) {
+				Object.assign(this, init);
+			}
+		},
+		LinearFilter: "LinearFilter",
+		DoubleSide: "DoubleSide",
+	} as unknown as typeof import("three");
+	const m = createShelfManager({ scene, three, document: documentLike as unknown as Document });
+	m.setShelfVisibility(1);
+	m.getState().centerTarget = 12;
+	m.getState().centerSmooth = 12;
+	m.setData(Array.from({ length: 25 }, (_, i) => ({ type: "playlist", title: `P${i}`, playlistId: `${i}` })));
+	m.update(makeCtx(createRuntimeUniforms(), 16));
+	expect(children.length).toBe(SHELF_MAX_RENDER);
+});
+
+test("ShelfManager redraws existing card sprites when selected state changes inside the same render window", () => {
+	const children: unknown[] = [];
+	const fillTextCalls: string[] = [];
+	const scene = {
+		add() {},
+		remove() {},
+	} as unknown as import("three").Scene;
+	class FakeGroup {
+		visible = true;
+		children = children;
+		add(obj: unknown) {
+			children.push(obj);
+		}
+		remove(obj: unknown) {
+			const idx = children.indexOf(obj);
+			if (idx >= 0) children.splice(idx, 1);
+		}
+	}
+	class FakeMesh {
+		position = { set() {} };
+		rotation = { set() {} };
+		scale = { setScalar() {} };
+		visible = true;
+		renderOrder = 0;
+		userData: Record<string, unknown> = {};
+		constructor(
+			public geometry: unknown,
+			public material: unknown,
+		) {}
+	}
+	const documentLike = {
+		createElement() {
+			return {
+				width: 0,
+				height: 0,
+				getContext() {
+					return {
+						clearRect() {},
+						fillRect() {},
+						roundRect() {},
+						beginPath() {},
+						fill() {},
+						stroke() {},
+						moveTo() {},
+						lineTo() {},
+						save() {},
+						restore() {},
+						clip() {},
+						createLinearGradient() {
+							return { addColorStop() {} };
+						},
+						measureText(text: string) {
+							return { width: text.length * 8 };
+						},
+						fillText(text: string) {
+							fillTextCalls.push(text);
+						},
+					};
+				},
+			};
+		},
+	};
+	const three = {
+		Group: FakeGroup,
+		Mesh: FakeMesh,
+		PlaneGeometry: class {
+			dispose() {}
+		},
+		CanvasTexture: class {
+			needsUpdate = false;
+			minFilter: unknown = null;
+			magFilter: unknown = null;
+			generateMipmaps = true;
+			dispose() {}
+		},
+		MeshBasicMaterial: class {
+			opacity = 1;
+			color = { setScalar() {} };
+			constructor(init: Record<string, unknown>) {
+				Object.assign(this, init);
+			}
+			dispose() {}
+		},
+		LinearFilter: "LinearFilter",
+		DoubleSide: "DoubleSide",
+	} as unknown as typeof import("three");
+	const m = createShelfManager({ scene, three, document: documentLike as unknown as Document });
+	m.setShelfVisibility(1);
+	m.setData([{ type: "playlist", title: "P0", playlistId: "0" }]);
+	m.update(makeCtx(createRuntimeUniforms(), 16));
+	const afterFirstUpdate = fillTextCalls.length;
+	m.setSelectedIdx(0);
+	m.update(makeCtx(createRuntimeUniforms(), 32));
+	expect(children.length).toBe(1);
+	expect(fillTextCalls.length).toBeGreaterThan(afterFirstUpdate);
+});
+
+test("ShelfManager clamps center and open detail indices when data shrinks", () => {
+	const children: unknown[] = [];
+	const scene = {
+		add() {},
+		remove() {},
+	} as unknown as import("three").Scene;
+	class FakeGroup {
+		visible = true;
+		add(obj: unknown) {
+			children.push(obj);
+		}
+		remove(obj: unknown) {
+			const idx = children.indexOf(obj);
+			if (idx >= 0) children.splice(idx, 1);
+		}
+	}
+	class FakeMesh {
+		position = { x: 0, y: 0, z: 0, set(x: number, y: number, z: number) {
+			this.x = x;
+			this.y = y;
+			this.z = z;
+		} };
+		rotation = { set() {} };
+		scale = { setScalar() {} };
+		visible = true;
+		renderOrder = 0;
+		userData: Record<string, unknown> = {};
+		constructor(
+			public geometry: unknown,
+			public material: unknown,
+		) {}
+	}
+	const documentLike = {
+		createElement() {
+			return {
+				width: 0,
+				height: 0,
+				getContext() {
+					return {
+						clearRect() {},
+						fillRect() {},
+						roundRect() {},
+						beginPath() {},
+						fill() {},
+						stroke() {},
+						moveTo() {},
+						lineTo() {},
+						save() {},
+						restore() {},
+						clip() {},
+						createLinearGradient() {
+							return { addColorStop() {} };
+						},
+						measureText(text: string) {
+							return { width: text.length * 8 };
+						},
+						fillText() {},
+					};
+				},
+			};
+		},
+	};
+	const three = {
+		Group: FakeGroup,
+		Mesh: FakeMesh,
+		PlaneGeometry: class {
+			dispose() {}
+		},
+		CanvasTexture: class {
+			needsUpdate = false;
+			minFilter: unknown = null;
+			magFilter: unknown = null;
+			generateMipmaps = true;
+			dispose() {}
+		},
+		MeshBasicMaterial: class {
+			opacity = 1;
+			color = { setScalar() {} };
+			constructor(init: Record<string, unknown>) {
+				Object.assign(this, init);
+			}
+			dispose() {}
+		},
+		LinearFilter: "LinearFilter",
+		DoubleSide: "DoubleSide",
+	} as unknown as typeof import("three");
+	const m = createShelfManager({ scene, three, document: documentLike as unknown as Document });
+	m.setShelfVisibility(1);
+	m.getState().centerTarget = 12;
+	m.getState().centerSmooth = 12;
+	m.openDetail(12);
+	m.setData([{ type: "playlist", title: "Only", playlistId: "only" }]);
+	m.update(makeCtx(createRuntimeUniforms(), 16));
+	expect(m.getState().centerTarget).toBe(0);
+	expect(m.getState().centerSmooth).toBe(0);
+	expect(m.getState().openCardIdx).toBe(-1);
+	expect(children.length).toBe(1);
+	expect((children[0] as { visible: boolean }).visible).toBe(true);
 });

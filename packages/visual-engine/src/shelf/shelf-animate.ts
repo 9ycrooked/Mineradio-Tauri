@@ -2,6 +2,18 @@ import type * as THREE from "three";
 import type { FrameContext } from "../runtime/frame-context";
 import { computeBreathPulse } from "./breath";
 import {
+	SHELF_MAX_RENDER,
+	SHELF_VISIBLE_RADIUS,
+	computeCardLayout,
+} from "./card-position";
+import { getDefaultShelfLayoutProfile } from "./shelf-layout-profile";
+import { computePaneRaw, computeRevealRaw } from "./reveal";
+import {
+	createShelfCardMesh,
+	type ShelfCardSprite,
+	type ShelfCardDrawState,
+} from "./shelf-card-sprite";
+import {
 	createShelfState,
 	type ShelfMode,
 	type ShelfPane,
@@ -23,6 +35,8 @@ export interface ShelfItem {
 export interface ShelfManagerOptions {
 	scene?: THREE.Scene | null;
 	group?: THREE.Group | null;
+	three?: typeof import("three") | null;
+	document?: Document | null;
 	now?: () => number;
 }
 
@@ -53,14 +67,24 @@ export interface ShelfManager {
 	openDetail(idx: number, opts?: { playlistId?: string; title?: string }): void;
 	closeDetail(opts?: { immediate?: boolean }): void;
 	getSnapshot(): ShelfSnapshot;
+	getRenderedCardCount(): number;
 	dispose(): void;
 }
 
 export function createShelfManager(opts: ShelfManagerOptions): ShelfManager {
 	const state: ShelfState = createShelfState();
 	const scene: THREE.Scene | null = opts.scene ?? null;
+	const three = opts.three ?? null;
+	const doc = opts.document ?? (typeof document !== "undefined" ? document : null);
 	let group: THREE.Group | null = opts.group ?? null;
+	const ownsGroup = !group && !!three;
+	if (!group && three) {
+		group = new three.Group();
+		if (scene) scene.add(group);
+	}
 	const data: ShelfItem[] = [];
+	const renderedCards = new Map<number, ShelfCardSprite>();
+	let renderedWindowSig = "";
 	let breathPulseLast = 0;
 	let lastFrameNow = 0;
 	const nowFn =
@@ -75,7 +99,8 @@ export function createShelfManager(opts: ShelfManagerOptions): ShelfManager {
 			data.length = 0;
 			for (const it of items) data.push(it);
 			state.lastSig = `${items.length}::${state.shelfPane}`;
-			if (state.selectedIdx >= items.length) state.selectedIdx = -1;
+			clampStateToDataLength(items.length);
+			renderedWindowSig = "";
 		},
 		getData() {
 			return data;
@@ -118,6 +143,8 @@ export function createShelfManager(opts: ShelfManagerOptions): ShelfManager {
 					data.length > 0 &&
 					state.mode !== "off";
 			}
+			rebuildRenderedWindowIfNeeded();
+			applyRenderedCardLayout(ctx);
 
 			void nowFn;
 		},
@@ -168,11 +195,191 @@ export function createShelfManager(opts: ShelfManagerOptions): ShelfManager {
 				breathPulse: breathPulseLast,
 			};
 		},
+		getRenderedCardCount() {
+			return renderedCards.size;
+		},
 		dispose() {
-			if (group && scene) {
+			disposeRenderedCards();
+			if (group && scene && ownsGroup) {
+				scene.remove(group);
+			} else if (group && scene && opts.group) {
 				scene.remove(group);
 			}
 			group = null;
 		},
 	};
+
+	function rebuildRenderedWindowIfNeeded(): void {
+		if (!group || !three || !doc || state.mode === "off" || data.length === 0) {
+			disposeRenderedCards();
+			renderedWindowSig = "";
+			return;
+		}
+		const window = computeRenderWindow();
+		const sig = `${window.start}:${window.end}:${data.length}:${state.shelfPane}`;
+		if (sig === renderedWindowSig) return;
+		disposeRenderedCards();
+		for (let index = window.start; index <= window.end; index++) {
+			const item = data[index];
+			if (!item) continue;
+			const card = createShelfCardMesh({
+				item,
+				index,
+				three,
+				createCanvas: () => doc.createElement("canvas"),
+				drawState: {
+					index,
+					centered: index === Math.round(state.centerSmooth),
+					selected: index === state.selectedIdx,
+					beatProgress: 0,
+					dimmed: state.openCardIdx >= 0 && state.openCardIdx !== index,
+				},
+			});
+			card.mesh.renderOrder = 50 + index;
+			group.add(card.mesh);
+			renderedCards.set(index, card);
+		}
+		renderedWindowSig = sig;
+	}
+
+	function applyRenderedCardLayout(ctx: FrameContext): void {
+		if (!group || renderedCards.size === 0) return;
+		const profile = getDefaultShelfLayoutProfile();
+		const center = state.centerSmooth;
+		const mode = state.mode === "stage" ? "stage" : "side";
+		for (const [index, card] of renderedCards) {
+			const absD = Math.abs(index - center);
+			const breathPulse = computeBreathPulse(
+				ctx.uniforms.uTime.value,
+				index,
+				state.shelfVisibility,
+			);
+			const layout = computeCardLayout({
+				index,
+				centerSmooth: center,
+				mode,
+				profile,
+				fx: { shelfPane: state.shelfPane },
+				revealRaw: computeRevealRaw(
+					ctx.uniforms.uTime.value,
+					state.shelfOpenAnimAt,
+					absD,
+				),
+				paneRaw: computePaneRaw(
+					ctx.uniforms.uTime.value,
+					state.paneSwitchAt,
+					absD,
+				),
+				absD,
+				paneSwitchDir: state.paneSwitchDir,
+				pulse: ctx.uniforms.uBeat.value,
+				breathPulse,
+				lift: index === state.selectedIdx ? 1 : 0,
+				detailOpen: state.openCardIdx >= 0,
+			});
+			card.mesh.visible = absD <= SHELF_VISIBLE_RADIUS + 0.55;
+			card.mesh.position.set(layout.x, layout.y, layout.z);
+			card.mesh.rotation.set(0, layout.rotationY, 0);
+			card.mesh.scale.setScalar(layout.scale);
+			card.mesh.renderOrder = layout.renderOrder;
+			card.material.opacity = layout.opacity * 0.96 * state.shelfVisibility;
+			const color = card.material.color as { setScalar?: (v: number) => void } | undefined;
+			color?.setScalar?.(state.openCardIdx >= 0 && state.openCardIdx !== index ? 0.72 : 1);
+			updateCardSpriteIfNeeded(card, index, ctx);
+		}
+	}
+
+	function updateCardSpriteIfNeeded(
+		card: ShelfCardSprite,
+		index: number,
+		ctx: FrameContext,
+	): void {
+		const item = data[index];
+		if (!item) return;
+		const absD = Math.abs(index - state.centerSmooth);
+		const drawState: ShelfCardDrawState = {
+			index,
+			centered: absD < 0.5,
+			selected: index === state.selectedIdx,
+			beatProgress: Math.min(1, 0.22 + Math.max(0, ctx.uniforms.uBass.value) * 0.62),
+			dimmed: state.openCardIdx >= 0 && state.openCardIdx !== index,
+		};
+		const drawKey = [
+			item.type || "",
+			item.title || "",
+			item.sub || "",
+			item.tag || "",
+			item.playlistId || "",
+			item.podcastKey || "",
+			item.queueIndex == null ? "" : item.queueIndex,
+			drawState.centered ? 1 : 0,
+			drawState.selected ? 1 : 0,
+			drawState.dimmed ? 1 : 0,
+			Math.round((drawState.beatProgress ?? 0) * 10),
+		].join("|");
+		const holder = card.mesh.userData as { drawKey?: string };
+		if (holder.drawKey === drawKey) return;
+		holder.drawKey = drawKey;
+		card.update(item, drawState);
+	}
+
+	function computeRenderWindow(): { start: number; end: number } {
+		const roundedCenter = clampInt(Math.round(state.centerSmooth), 0, Math.max(0, data.length - 1));
+		state.centerIdx = roundedCenter;
+		let start = Math.max(0, roundedCenter - SHELF_VISIBLE_RADIUS);
+		let end = Math.min(data.length - 1, roundedCenter + SHELF_VISIBLE_RADIUS);
+		const count = end - start + 1;
+		if (count < SHELF_MAX_RENDER && data.length > count) {
+			const need = SHELF_MAX_RENDER - count;
+			const growLeft = Math.min(start, Math.ceil(need / 2));
+			start -= growLeft;
+			const growRight = Math.min(data.length - 1 - end, need - growLeft);
+			end += growRight;
+			if (end - start + 1 < SHELF_MAX_RENDER) {
+				start = Math.max(0, end - SHELF_MAX_RENDER + 1);
+			}
+		}
+		return { start, end };
+	}
+
+	function disposeRenderedCards(): void {
+		if (renderedCards.size === 0) return;
+		for (const card of renderedCards.values()) {
+			try {
+				group?.remove(card.mesh);
+			} catch {
+			}
+			card.dispose();
+		}
+		renderedCards.clear();
+	}
+
+	function clampStateToDataLength(length: number): void {
+		if (length <= 0) {
+			state.centerIdx = 0;
+			state.centerTarget = 0;
+			state.centerSmooth = 0;
+			state.selectedIdx = -1;
+			state.openCardIdx = -1;
+			return;
+		}
+		const max = length - 1;
+		state.centerIdx = clampInt(state.centerIdx, 0, max);
+		state.centerTarget = clampInt(state.centerTarget, 0, max);
+		state.centerSmooth = clampInt(state.centerSmooth, 0, max);
+		if (state.selectedIdx > max) state.selectedIdx = -1;
+		if (state.openCardIdx > max) state.openCardIdx = -1;
+	}
+}
+
+function clampInt(value: number, min: number, max: number): number {
+	if (!Number.isFinite(value)) return min;
+	return Math.max(min, Math.min(max, value));
+}
+
+export async function createShelfManagerWithThree(
+	opts: Omit<ShelfManagerOptions, "three"> = {},
+): Promise<ShelfManager> {
+	const three = await import("three");
+	return createShelfManager({ ...opts, three });
 }

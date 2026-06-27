@@ -5,6 +5,8 @@ import {
 	createHomeVisual,
 	createRenderLoop,
 	createRenderer,
+	createShelfManagerWithThree,
+	createShelfStep,
 	createStageLyricsLifecycle,
 	RenderStepSlot,
 	type AudioFrameBytes,
@@ -16,6 +18,7 @@ import {
 	type LyricLine as VisualLyricLine,
 	type RendererHandle,
 	type RenderLoop,
+	type ShelfManager,
 	type StageLyricsLifecycle,
 } from "@mineradio/visual-engine";
 
@@ -36,11 +39,13 @@ interface MountedHandles {
 	audioEngine: AudioReactivityEngine;
 	cinema: CinemaCamera;
 	homeVisual: HomeVisual;
+	shelfManager: ShelfManager;
 	lifecycle: StageLyricsLifecycle;
 	renderLoop: RenderLoop;
 	audioContext: AudioContext | null;
 	offHome: () => void;
 	offCamera: () => void;
+	offShelf: () => void;
 	offLyrics: () => void;
 	offAudio: () => void;
 	offHomeAudio: () => void;
@@ -166,6 +171,10 @@ function disposeHandles(handles: MountedHandles | null): void {
 	} catch {
 	}
 	try {
+		handles.offShelf();
+	} catch {
+	}
+	try {
 		handles.offLyrics();
 	} catch {
 	}
@@ -183,6 +192,10 @@ function disposeHandles(handles: MountedHandles | null): void {
 	}
 	try {
 		handles.homeVisual.dispose();
+	} catch {
+	}
+	try {
+		handles.shelfManager.dispose();
 	} catch {
 	}
 	try {
@@ -243,6 +256,19 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 				fx: refs.fxDefaults as FxState | undefined,
 			});
 			if (cancelled || disposedRef.current) {
+				homeVisual.dispose();
+				audioEngine.dispose();
+				cinema.dispose();
+				renderer.dispose();
+				return;
+			}
+			const shelfManager = await createShelfManagerWithThree({
+				scene: renderer.scene,
+				document,
+			});
+			if (cancelled || disposedRef.current) {
+				shelfManager.dispose();
+				homeVisual.dispose();
 				audioEngine.dispose();
 				cinema.dispose();
 				renderer.dispose();
@@ -253,10 +279,20 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 				currentTimeSupplier: () => refs.positionRef.current / 1000,
 				isPlayingSupplier: () => refs.isPlayingRef.current,
 				lyricLinesSupplier: () => refs.lyricLinesRef.current,
-				getShelfVisibility: () => 0,
+				getShelfVisibility: () => shelfManager.getShelfVisibility(),
 				pixelScale: 1,
 				reduceMotion: prefersReducedMotion,
 			});
+			shelfManager.setData([
+				{
+					type: "playlist",
+					title: "Mineradio",
+					sub: "Tauri shelf host fixture",
+					tag: "PLAYLIST",
+					playlistId: "fixture",
+				},
+			]);
+			shelfManager.setShelfVisibility(0);
 			void lifecycle.mount(renderer.scene);
 			refs.lifecycleRef.current = lifecycle;
 			try {
@@ -282,6 +318,7 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 			const offCamera = renderLoop.registerStep(RenderStepSlot.CameraCinematic, (ctx) => {
 				cinema.update(ctx);
 			});
+			const offShelf = renderLoop.registerStep(RenderStepSlot.Shelf, createShelfStep(shelfManager));
 			const offLyrics = renderLoop.registerStep(RenderStepSlot.StageLyrics, (ctx) => {
 				lifecycle.update(ctx);
 			});
@@ -293,11 +330,13 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 				audioEngine,
 				cinema,
 				homeVisual,
+				shelfManager,
 				lifecycle,
 				renderLoop,
 				audioContext: null,
 				offHome,
 				offCamera,
+				offShelf,
 				offLyrics,
 				offAudio,
 				offHomeAudio,
