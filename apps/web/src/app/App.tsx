@@ -10,6 +10,7 @@ import { usePlaybackStore } from "../stores/playback-store";
 import { useProviderStore } from "../stores/provider-store";
 import { getRuntimeConfig, type RuntimeConfig } from "../tauri/runtime";
 import { SplashHost } from "../visual/SplashHost";
+import { VisualEngineHost } from "../visual/VisualEngineHost";
 
 const SHOW_SPLASH = import.meta.env.VITE_SPLASH !== "0";
 
@@ -43,6 +44,7 @@ export function App(): ReactElement {
 	const [health, setHealth] = useState<HealthResponse | null>(null);
 	const [error, setError] = useState<SidecarError | null>(null);
 	const [sidecarClient, setSidecarClient] = useState<SidecarClient | null>(null);
+	const [splashActive, setSplashActive] = useState<boolean>(SHOW_SPLASH);
 
 	const currentTrack = usePlaybackStore((s) => s.currentTrack);
 	const isPlaying = usePlaybackStore((s) => s.isPlaying);
@@ -241,7 +243,21 @@ export function App(): ReactElement {
 
 	return (
 		<>
-			{SHOW_SPLASH && <SplashHost autoDismissMs={1180 + 980 + 600} />}
+			{SHOW_SPLASH && (
+				<SplashHost
+					autoDismissMs={1180 + 980 + 600}
+					onDismissed={() => setSplashActive(false)}
+				/>
+			)}
+			<VisualEngineHost
+				audioElementRef={audioRef}
+				controllerRef={controllerRef}
+				lyricsPayload={lyricsPayload}
+				positionMs={positionMs}
+				isPlaying={isPlaying}
+				coverResolution={1.55}
+				splashActive={splashActive}
+			/>
 			<main className="shell">
 			<section className="status-panel">
 				<p className="eyebrow">Mineradio Tauri Rewrite</p>
@@ -296,12 +312,12 @@ export function App(): ReactElement {
 							{lyricsPayload && ` · line ${lyricsSignedIndex + 1}`}
 						</dd>
 					</div>
-					<div>
-						<dt>Visual Host</dt>
-						<dd>
-							<div id="visual-host" className="visual-host" />
-						</dd>
-					</div>
+				<div>
+					<dt>Visual Host</dt>
+					<dd>
+						<span className="visual-host-label">visual engine running</span>
+					</dd>
+				</div>
 				</dl>
 			</section>
 		</main>
