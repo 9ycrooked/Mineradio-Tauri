@@ -173,3 +173,41 @@ export {
 	disposeLyricGroup,
 } from "./stage-lyrics/lyric-builder";
 export type { LyricGroup, LyricGroupOptions } from "./stage-lyrics/lyric-builder";
+
+export {
+	getLyricLineProgress,
+} from "./stage-lyrics/lyric-line-progress";
+export type { LyricLine, LyricWord } from "./stage-lyrics/lyric-line-progress";
+
+export {
+	createStageLyricsLifecycle,
+} from "./stage-lyrics/lifecycle";
+export type {
+	StageLyricsLifecycle,
+	StageLyricsLifecycleOpts,
+} from "./stage-lyrics/lifecycle";
+
+export {
+	LYRIC_TRANSITION_DURATIONS,
+	LYR_IN_EASE_NAME,
+	LYR_OUT_EASE_NAME,
+	LYR_IN_EASE_FALLBACK,
+	LYR_OUT_EASE_FALLBACK,
+	LYR_BOB_EASE,
+	LYR_IN_BEZIER_PATH,
+	LYR_OUT_BEZIER_PATH,
+	defaultTransitionEasings,
+	createTransitionEasings,
+	playStageLineInTimeline,
+	playStageLineBobTimeline,
+	playStageLineOutTimeline,
+} from "./stage-lyrics/transitions";
+export type {
+	LyricTransitionEasings,
+	LyricTransitionOpts,
+	CustomEaseCreator,
+} from "./stage-lyrics/transitions";
+
+export { LyricPaletteRuntime } from "./stage-lyrics/palette-runtime";
+export { createLyricPaletteDriver } from "./stage-lyrics/palette-driver";
+export type { PaletteDriver } from "./stage-lyrics/palette-driver";

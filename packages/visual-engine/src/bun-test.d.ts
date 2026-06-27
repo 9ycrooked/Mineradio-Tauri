@@ -6,6 +6,8 @@ declare module "bun:test" {
     toBe(expected: unknown): void;
     toEqual(expected: unknown): void;
     toBeNull(): void;
+    toBeUndefined(): void;
+    toBeDefined(): void;
     toBeGreaterThan(expected: number): void;
     toBeGreaterThanOrEqual(expected: number): void;
     toBeLessThan(expected: number): void;
@@ -17,7 +19,7 @@ declare module "bun:test" {
     toBeInstanceOf(expected: unknown): void;
   }
   export interface ExpectWithNot extends ExpectBase {
-    readonly not: Pick<ExpectBase, "toBe" | "toEqual" | "toBeNull" | "toContain">;
+    readonly not: Pick<ExpectBase, "toBe" | "toEqual" | "toBeNull" | "toBeUndefined" | "toContain">;
   }
   export function expect(actual: unknown): ExpectWithNot;
 }
