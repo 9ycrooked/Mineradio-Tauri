@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@mineradio/shared": "workspace:*"
+    "@mineradio/shared": "workspace:*",
+    "hana-music-api": "^1.1.1"
   },
   "devDependencies": {
     "typescript": "^5.0.0"

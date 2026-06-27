@@ -7,11 +7,15 @@ test("registry exposes netease and qq adapters", () => {
   expect(PROVIDER_IDS).toEqual(["netease", "qq"]);
 });
 
-test("capability matrix lists both providers unavailable with empty capabilities", () => {
+test("capability matrix: netease is online with capabilities; qq stays unavailable", () => {
   const m = buildCapabilityMatrix();
   expect(m.providers.length).toBe(2);
-  for (const e of m.providers) {
-    expect(e.available).toBe(false);
-    expect(e.capabilities.length).toBe(0);
-  }
+  const netease = m.providers.find(e => e.providerId === "netease");
+  const qq = m.providers.find(e => e.providerId === "qq");
+  expect(netease).toBeDefined();
+  expect(netease?.available).toBe(true);
+  expect(netease?.capabilities.length).toBeGreaterThan(0);
+  expect(qq).toBeDefined();
+  expect(qq?.available).toBe(false);
+  expect(qq?.capabilities.length).toBe(0);
 });

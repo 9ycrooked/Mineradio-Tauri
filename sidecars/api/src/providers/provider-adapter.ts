@@ -39,3 +39,23 @@ export class ProviderNotImplementedError extends Error {
     this.action = action;
   }
 }
+
+export class ProviderError extends Error {
+  readonly code: string;
+  readonly provider: ProviderId;
+  readonly retryable: boolean;
+  readonly action?: string;
+  constructor(
+    provider: ProviderId,
+    code: string,
+    message: string,
+    opts?: { retryable?: boolean; action?: string }
+  ) {
+    super(message);
+    this.name = "ProviderError";
+    this.provider = provider;
+    this.code = code;
+    this.retryable = opts?.retryable ?? false;
+    this.action = opts?.action;
+  }
+}

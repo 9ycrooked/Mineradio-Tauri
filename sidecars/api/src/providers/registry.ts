@@ -1,4 +1,9 @@
-import type { CapabilityMatrix, ProviderStatusEntry, ProviderId } from "@mineradio/shared";
+import type {
+  CapabilityMatrix,
+  ProviderStatusEntry,
+  ProviderCapability,
+  ProviderId
+} from "@mineradio/shared";
 import { neteaseAdapter } from "./netease/netease-adapter";
 import { qqAdapter } from "./qq/qq-adapter";
 import type { ProviderAdapter } from "./provider-adapter";
@@ -10,12 +15,29 @@ export const providers: Record<ProviderId, ProviderAdapter> = {
 
 export const PROVIDER_IDS: ProviderId[] = ["netease", "qq"];
 
+const NETEASE_CAPABILITIES: ProviderCapability[] = [
+  "search",
+  "songUrl",
+  "lyric",
+  "playlistDetail",
+  "loginStatus",
+  "logout"
+];
+
 export function buildCapabilityMatrix(): CapabilityMatrix {
-  const entries: ProviderStatusEntry[] = PROVIDER_IDS.map((id) => ({
-    providerId: id,
-    available: false,
-    capabilities: [],
-    message: "provider not implemented"
-  }));
+  const entries: ProviderStatusEntry[] = [
+    {
+      providerId: "netease",
+      available: true,
+      capabilities: NETEASE_CAPABILITIES,
+      message: "online"
+    },
+    {
+      providerId: "qq",
+      available: false,
+      capabilities: [],
+      message: "license-review"
+    }
+  ];
   return { version: "0.1.0", providers: entries };
 }
