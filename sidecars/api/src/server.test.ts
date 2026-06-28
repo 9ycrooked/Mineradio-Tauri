@@ -262,9 +262,37 @@ test("GET /diagnostics returns 200 and contains none of the forbidden cookie/aut
   }
 });
 
-test("GET /audio-proxy returns 501 NOT_IMPLEMENTED", async () => {
-  const r = await call("/audio-proxy?url=https://example.com/x.mp3");
-  expect(r.status).toBe(501);
+test("GET /audio-proxy without url returns 400 BAD_REQUEST", async () => {
+  const r = await call("/audio-proxy");
+  expect(r.status).toBe(400);
   const b = await body(r);
-  expect(b.error.code).toBe("NOT_IMPLEMENTED");
+  expect(b.error.code).toBe("BAD_REQUEST");
+  expect(b.error.retryable).toBe(false);
+});
+
+test("GET /audio-proxy returns injected proxy response directly", async () => {
+  const handler = createRouteHandler({
+    audioProxy: async ({ target, request }) => {
+      expect(target).toBe("https://media.example.test/song.mp3");
+      expect(request.headers.get("range")).toBe("bytes=0-3");
+      return new Response("song", {
+        status: 206,
+        headers: {
+          "content-type": "audio/mpeg",
+          "access-control-allow-origin": "*"
+        }
+      });
+    }
+  });
+
+  const r = await handler(
+    new Request("http://127.0.0.1/audio-proxy?url=https%3A%2F%2Fmedia.example.test%2Fsong.mp3", {
+      headers: { range: "bytes=0-3" }
+    })
+  );
+
+  expect(r.status).toBe(206);
+  expect(r.headers.get("content-type")).toBe("audio/mpeg");
+  expect(r.headers.get("access-control-allow-origin")).toBe("*");
+  expect(await r.text()).toBe("song");
 });

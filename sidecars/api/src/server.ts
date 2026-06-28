@@ -12,7 +12,7 @@ import { providers, buildCapabilityMatrix, PROVIDER_IDS } from "./providers/regi
 import { ProviderNotImplementedError } from "./providers/provider-adapter";
 import { normalizeError } from "./services/fallback";
 import { buildDiagnostics } from "./services/diagnostics";
-import { resolveAudioProxy } from "./services/audio-proxy";
+import { resolveAudioProxy, type AudioProxy } from "./services/audio-proxy";
 import {
   crossSourceResolver,
   type CrossSourceResolver
@@ -20,10 +20,12 @@ import {
 
 export type RouteHandlerDeps = {
   crossSourceResolver?: CrossSourceResolver;
+  audioProxy?: AudioProxy;
 };
 
 export function createRouteHandler(deps: RouteHandlerDeps = {}) {
   const resolver = deps.crossSourceResolver ?? crossSourceResolver;
+  const audioProxy = deps.audioProxy ?? resolveAudioProxy;
 
   return async function handleRoute(request: Request): Promise<Response> {
     const url = new URL(request.url);
@@ -52,7 +54,7 @@ export function createRouteHandler(deps: RouteHandlerDeps = {}) {
 
     if (path === "/audio-proxy" && method === "GET") {
       const target = url.searchParams.get("url") ?? "";
-      return json(resolveAudioProxy(target), 501);
+      return await audioProxy({ target, request });
     }
 
     if (path === "/search" && method === "GET") {

@@ -34,7 +34,7 @@ src/
     ├── cross-source-resolver.ts     # provider-agnostic search/songUrl fallback + source switching
     ├── diagnostics.ts                # buildDiagnostics + pushRecentError ring buffer (cap 20)
     ├── diagnostics.test.ts           # cookie-leak 回归 assert
-    └── audio-proxy.ts                # stub，返回 NOT_IMPLEMENTED
+    └── audio-proxy.ts                # HTMLAudioElement 本地代理：Range 白名单转发 + 安全响应头透传
 ```
 
 ## WHERE TO LOOK
@@ -47,6 +47,7 @@ src/
 | 改 capability matrix | `providers/registry.ts` buildCapabilityMatrix + registry.test.ts | 现 netease / qq 均 `available:true`（7c32b2b 后） |
 | 改 diagnostics | `services/diagnostics.ts` buildDiagnostics；test 强 assert cookie/auth keys 不出现 | 添加字段时**不要包含 cookie/MUSIC_U/qm_keyst/qqmusic_key/wxskey** |
 | 加跨源 fallback | `services/cross-source-resolver.ts` + routeHandler `/search` 和 `/song-url` provider-agnostic 路由 | 代码侧已落地：preferred/registry-order fallback、空结果继续尝试、songUrl 通过 title/artists 搜索候选换源；WebView2 手动 provider evidence 待补 |
+| 改音频代理 | `services/audio-proxy.ts` + `services/audio-proxy.test.ts` + `server.test.ts` | service 通过 `createAudioProxy({ fetch })` 做 fake fetch DI；成功代理直接返回 `Response` 流，不包 ApiResponse；错误保持统一 envelope |
 | Bun CJS interop | `providers/qq/qq-client.ts:22-33` 用 `import.meta.require("qq-music-api")` | 不要用全局 `require()` —— 无 @types/node，typecheck 报 TS2580 |
 
 ## CONVENTIONS（仅记录偏离标准）
@@ -97,6 +98,6 @@ git diff --check
 ## NOTES
 
 - 测试端到端：当前 `sidecars/api/src/server.test.ts` 内 Netease search/songUrl/lyric/playlists 路由测试**会触达真实 Netease 网络**（最近 commit 改 placeholder → 真 adapter 后写的 envelope shape 测试），CI 离线时会 flaky；观察是否需要后续注入 fake transport。
-- `audio-proxy.ts` 是 NOT_IMPLEMENTED stub — audio proxy 走跨越 CORS preflight 阶段，落地需要 origin-proxy 决定方案，未在 P4-P10 任何 gate 完成。
+- `audio-proxy.ts` 已完成 code-side local proxy：`GET /audio-proxy?url=<encoded http/https URL>` 会转发 `Range`，不会转发 incoming `Cookie` / `Authorization`；透传 `content-type`、`content-length`、`accept-ranges`、`content-range`、`cache-control`、`etag`、`last-modified`，并加 `Access-Control-Allow-Origin:*`。真实 WebView2 HTMLAudioElement 播放仍需要手动验证，发布 gate 不能只凭 URL/单测勾选。
 - license：QQ 客户端依赖 `qq-music-api` (GPL-3.0)；sidecar 是私有 Bun 工作区（`@mineradio/sidecar-api` private:true），不开源分发包随 binary 分发时需 NOTICE / GPL 通告 (见 P10.c 待办)。
 - Transitive deps `axios/cheerio/express/jade/js-base64/moment/xml2js/cookie-parser` 全部 GPL/MIT/BSD 兼容，已记入 `docs/migration/LICENSE_GATE.md` Dependency Audit 表 [transitive via qq-music-api].
