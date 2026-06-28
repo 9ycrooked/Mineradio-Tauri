@@ -20,6 +20,7 @@ import {
 import { createHomeRipples, type HomeRipples } from "./ripples";
 import { deriveLyricPaletteFromCover, type CoverCanvasLike } from "./cover-colors";
 import type { LyricPalette } from "../stage-lyrics/palette";
+import { createBackCoverLayer, type BackCoverLayer } from "./back-cover-layer";
 
 export interface HomeVisualOptions {
 	scene: THREE.Scene;
@@ -30,6 +31,7 @@ export interface HomeVisualOptions {
 	createCoverCanvas?: HomeCoverCanvasFactory;
 	buildCoverEdgeDepth?: (image: HomeCoverImage) => HomeCoverImage | null;
 	onCoverLyricPalette?: (palette: LyricPalette) => void;
+	backCoverRandom?: () => number;
 }
 
 export interface HomeVisual {
@@ -42,6 +44,7 @@ export interface HomeVisual {
 	setCoverUrl(url: string | null | undefined): void;
 	getCoverController(): HomeCoverTextureController;
 	getRipples(): HomeRipples;
+	whenIdle(): Promise<void>;
 }
 
 export async function createHomeVisual(opts: HomeVisualOptions): Promise<HomeVisual> {
@@ -58,6 +61,8 @@ export async function createHomeVisual(opts: HomeVisualOptions): Promise<HomeVis
 		createCanvas: opts.createCoverCanvas,
 		buildEdgeDepth: opts.buildCoverEdgeDepth,
 		onCoverPrepared(image) {
+			latestPreparedCover = image;
+			backCoverLayer?.refreshColorsFromCover(image as CoverCanvasLike);
 			if (!opts.onCoverLyricPalette) return;
 			const palette = deriveLyricPaletteFromCover(image as CoverCanvasLike);
 			if (!palette) return;
@@ -70,15 +75,45 @@ export async function createHomeVisual(opts: HomeVisualOptions): Promise<HomeVis
 		},
 	});
 	const ripples = createHomeRipples(field.materialUniforms as never);
+	let backCoverLayer: BackCoverLayer | null = null;
+	let backCoverPending: Promise<void> | null = null;
+	let latestPreparedCover: HomeCoverImage | null = null;
 	field.applyFxState(fx);
 	field.bloomPoints.visible = !!(fx.bloom && fx.bloomStrength > 0.01) && fx.preset !== SKULL_PRESET_INDEX;
 	field.points.visible = fx.preset !== SKULL_PRESET_INDEX;
+
+	function syncBackCoverLayer(): void {
+		if (fx.backCover) {
+			if (!backCoverLayer && !backCoverPending) {
+				backCoverPending = createBackCoverLayer({
+					scene: opts.scene,
+					threeFactory: opts.threeFactory,
+					uniforms: field.materialUniforms as never,
+					random: opts.backCoverRandom,
+				}).then((layer) => {
+					backCoverLayer = layer;
+					backCoverPending = null;
+					if (latestPreparedCover) layer.refreshColorsFromCover(latestPreparedCover as CoverCanvasLike);
+					if (!fx.backCover) {
+						layer.dispose();
+						if (backCoverLayer === layer) backCoverLayer = null;
+					}
+				});
+			}
+			return;
+		}
+		if (backCoverLayer) {
+			backCoverLayer.dispose();
+			backCoverLayer = null;
+		}
+	}
 
 	function stepBody(ctx: FrameContext): void {
 		field.applyFxState(fx);
 		field.points.visible = fx.preset !== SKULL_PRESET_INDEX;
 		const bloomAllowed = !!(fx.bloom && fx.bloomStrength > 0.01) && fx.preset !== SKULL_PRESET_INDEX;
 		field.bloomPoints.visible = bloomAllowed;
+		syncBackCoverLayer();
 
 		syncFxUniforms(fx, ctx.snapshot, ctx.uniforms as unknown as UniformContainer, { dt: ctx.dt });
 		syncFxUniforms(fx, ctx.snapshot, field.materialUniforms as unknown as UniformContainer, { dt: ctx.dt });
@@ -100,6 +135,7 @@ export async function createHomeVisual(opts: HomeVisualOptions): Promise<HomeVis
 	return {
 		update: stepBody,
 		dispose() {
+			backCoverLayer?.dispose();
 			field.dispose();
 		},
 		getPreset() {
@@ -126,6 +162,9 @@ export async function createHomeVisual(opts: HomeVisualOptions): Promise<HomeVis
 		},
 		getRipples() {
 			return ripples;
+		},
+		whenIdle() {
+			return backCoverPending ?? Promise.resolve();
 		},
 	};
 }

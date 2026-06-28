@@ -223,6 +223,60 @@ test("HomeVisual.setCoverUrl derives baseline lyric palette from the prepared co
 	}]);
 });
 
+test("HomeVisual.update lazily mounts and disposes baseline back-cover layer from fx.backCover", async () => {
+	const scene = makeFakeScene();
+	const hv = await createHomeVisual({ scene: scene as never, threeFactory: makeFakeThree() });
+	expect(scene.added.length).toBe(2);
+	hv.getFx().backCover = true;
+	hv.update(makeFrameCtx() as unknown as FrameContext);
+	await hv.whenIdle();
+	expect(scene.added.length).toBe(3);
+	const backCover = scene.added[2] as { isPoints: boolean; geometry: { attributes: Record<string, { count: number }> } };
+	expect(backCover.isPoints).toBe(true);
+	expect(backCover.geometry.attributes.aUv.count).toBe(3000);
+	hv.getFx().backCover = false;
+	hv.update(makeFrameCtx() as unknown as FrameContext);
+	expect(scene.removed).toContain(backCover);
+});
+
+test("HomeVisual.setCoverUrl refreshes mounted back-cover colors from the prepared cover canvas", async () => {
+	const scene = makeFakeScene();
+	const hv = await createHomeVisual({
+		scene: scene as never,
+		threeFactory: makeFakeThree(),
+		fx: { ...((await import("./fx-defaults")).cloneFxState()), backCover: true },
+		backCoverRandom: () => 0,
+		loadCoverImage: async (url) => ({ naturalWidth: 4, naturalHeight: 4, src: url }),
+		createCoverCanvas: (width, height) => ({
+			width,
+			height,
+			getContext: () => ({
+				drawImage() {},
+				getImageData() {
+					const data = new Uint8ClampedArray(width * height * 4);
+					for (let i = 0; i < data.length; i += 4) {
+						data[i] = 120;
+						data[i + 1] = 0;
+						data[i + 2] = 200;
+						data[i + 3] = 255;
+					}
+					return { data };
+				},
+			} as never),
+		}) as never,
+	});
+	hv.update(makeFrameCtx() as unknown as FrameContext);
+	await hv.whenIdle();
+	hv.setCoverUrl("https://img.example/a.jpg");
+	await hv.getCoverController().whenIdle();
+	const backCover = scene.added[2] as { geometry: { attributes: Record<string, { array: Float32Array; needsUpdate: boolean }> } };
+	const color = backCover.geometry.attributes.aColor.array;
+	expect(color[0]).toBeCloseTo(120 / 255 * 0.85, 6);
+	expect(color[1]).toBe(0);
+	expect(color[2]).toBeCloseTo(200 / 255 * 0.85, 6);
+	expect(backCover.geometry.attributes.aColor.needsUpdate).toBe(true);
+});
+
 test("HomeVisual.update advances cover depth uniforms after edge texture generation", async () => {
 	const scene = makeFakeScene();
 	const edgeCanvas = { width: 256, height: 256, label: "edge" };

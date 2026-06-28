@@ -182,6 +182,18 @@ export type {
 	CoverLyricPalette,
 } from "./home-visual/cover-colors";
 export {
+	BACK_COVER_COUNT,
+	BACK_COVER_FRAGMENT_SHADER,
+	BACK_COVER_PLANE_SIZE,
+	BACK_COVER_VERTEX_SHADER,
+	createBackCoverLayer,
+} from "./home-visual/back-cover-layer";
+export type {
+	BackCoverLayer,
+	BackCoverLayerOptions,
+	BackCoverLayerUniforms,
+} from "./home-visual/back-cover-layer";
+export {
 	HOME_VISUAL_VERTEX_SHADER,
 	HOME_VISUAL_FRAGMENT_SHADER,
 	HOME_VISUAL_BLOOM_FRAGMENT_SHADER,
