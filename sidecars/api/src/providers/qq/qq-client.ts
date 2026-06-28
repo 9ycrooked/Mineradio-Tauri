@@ -65,6 +65,7 @@ export const qqClient = {
   userSonglists: wrap("user/songlist"),
   userCollectSonglists: wrap("user/collect/songlist"),
   playlistDetail: wrap("songlist"),
+  addSongToPlaylist: wrap("songlist/add"),
   loginStatus: wrap("user"),
   logout: wrap("user")
 } as const;

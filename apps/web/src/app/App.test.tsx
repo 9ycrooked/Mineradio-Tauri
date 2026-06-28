@@ -311,3 +311,85 @@ test("App opens the baseline collect picker for shelf detail collect and adds on
 	host.remove();
 	localStorage.clear();
 });
+
+test("App opens the collect picker for QQ detail rows and filters to writable QQ playlists", async () => {
+	await import("../../../../packages/visual-engine/src/runtime/happy-dom-preload");
+	(globalThis as unknown as { localStorage: Storage }).localStorage = window.localStorage;
+	localStorage.clear();
+	usePlaybackStore.getState().clearQueue();
+
+	const added: unknown[] = [];
+	const fakeClient = {
+		async playlistList(provider: string) {
+			if (provider === "netease") {
+				return [
+					{ provider: "netease", id: "ne-1", name: "网易云歌单", coverUrl: "", trackCount: 1, trackIds: [] },
+				];
+			}
+			return [
+				{ provider: "qq", id: "qq-mine", name: "QQ 自建", coverUrl: "", trackCount: 5, trackIds: [] },
+				{ provider: "qq", id: "qq-sub", name: "QQ 收藏来的歌单", coverUrl: "", trackCount: 7, trackIds: [], subscribed: true },
+			];
+		},
+		async addSongToPlaylist(provider: string, playlistId: string, trackId: string) {
+			added.push({ provider, playlistId, trackId });
+			return { provider, playlistId, trackId, code: 100, success: true };
+		},
+	} as unknown as SidecarClient;
+
+	let triggerCollect: (() => void) | null = null;
+	function MockVisual(props: VisualEngineHostProps) {
+		triggerCollect = () => props.onShelfDetailRowClick?.({
+			index: 0,
+			action: "collect",
+			row: {
+				id: "qq-song-1",
+				name: "QQ Song",
+				artist: "Bob",
+				cover: "",
+				provider: "qq",
+				type: "playable",
+				sourceId: "qq-song-1",
+				title: "QQ Song",
+				artists: ["Bob"],
+				album: "",
+				coverUrl: "",
+				playableState: "playable",
+				qualityHints: [],
+			},
+		});
+		return <div id="visual-host" />;
+	}
+	const rootConfig: RuntimeConfig = {
+		sidecarBaseUrl: "http://127.0.0.1:39999",
+		appDataDir: "",
+		appVersion: "0.0.0-test",
+		schemaVersion: "0.1.0",
+		updaterPublicKeyConfigured: false,
+	};
+	const host = document.createElement("div");
+	document.body.appendChild(host);
+	const root = createRoot(host);
+	flushSync(() => root.render(<App SplashComponent={() => null} VisualComponent={MockVisual} createSidecarClient={() => fakeClient} initialRuntimeConfig={rootConfig} />));
+	await new Promise((resolve) => setTimeout(resolve, 0));
+
+	flushSync(() => triggerCollect?.());
+	await new Promise((resolve) => setTimeout(resolve, 0));
+
+	expect(host.querySelector("#collect-modal.show")).not.toBeNull();
+	expect(host.querySelector("#collect-current")?.textContent).toContain("QQ Song");
+	expect(host.querySelector("#collect-list")?.textContent).toContain("QQ 自建");
+	expect(host.querySelector("#collect-list")?.textContent).not.toContain("QQ 收藏来的歌单");
+	expect(host.querySelector("#collect-list")?.textContent).not.toContain("网易云歌单");
+	expect(added).toEqual([]);
+
+	(host.querySelector('[data-collect-pid="qq-mine"]') as HTMLButtonElement).click();
+	await new Promise((resolve) => setTimeout(resolve, 0));
+
+	expect(added).toEqual([{ provider: "qq", playlistId: "qq-mine", trackId: "qq-song-1" }]);
+	expect(host.querySelector("#collect-modal.show")).toBeNull();
+
+	root.unmount();
+	host.remove();
+	localStorage.clear();
+});

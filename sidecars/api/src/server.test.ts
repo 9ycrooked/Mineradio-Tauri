@@ -538,6 +538,33 @@ test("POST /providers/netease/playlists/add-song validates body and calls adapte
   });
 });
 
+test("POST /providers/qq/playlists/add-song validates body and calls adapter", async () => {
+  const calls: unknown[] = [];
+  const fakeQq: ProviderAdapter = {
+    ...providers.qq,
+    async addSongToPlaylist(playlistId, trackId) {
+      calls.push({ playlistId, trackId });
+      return { provider: "qq", playlistId, trackId, success: true, code: 100 };
+    }
+  };
+  const handler = createRouteHandler({
+    providerAdapters: { ...providers, qq: fakeQq }
+  });
+
+  const r = await handler(new Request("http://127.0.0.1/providers/qq/playlists/add-song", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ playlistId: "201", trackId: "002Zkt5S2oAB7X" })
+  }));
+
+  expect(r.status).toBe(200);
+  expect(calls).toEqual([{ playlistId: "201", trackId: "002Zkt5S2oAB7X" }]);
+  expect(await body(r)).toEqual({
+    ok: true,
+    data: { provider: "qq", playlistId: "201", trackId: "002Zkt5S2oAB7X", success: true, code: 100 }
+  });
+});
+
 test("POST /providers/netease/login-status (method mismatch) returns 404", async () => {
   const r = await call("/providers/netease/login-status", { method: "POST" });
   expect(r.status).toBe(404);

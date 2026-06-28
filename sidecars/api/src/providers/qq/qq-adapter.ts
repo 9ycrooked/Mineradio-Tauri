@@ -45,6 +45,7 @@ export interface QqClientDeps {
   userSonglists: QqCall;
   userCollectSonglists: QqCall;
   playlistDetail: QqCall;
+  addSongToPlaylist: QqCall;
   loginStatus: QqCall;
   logout: QqCall;
   getConfig(): { cookie?: string };
@@ -63,6 +64,7 @@ const defaultDeps: QqClientDeps = {
   userSonglists: cast(qqClient.userSonglists),
   userCollectSonglists: cast(qqClient.userCollectSonglists),
   playlistDetail: cast(qqClient.playlistDetail),
+  addSongToPlaylist: cast(qqClient.addSongToPlaylist),
   loginStatus: cast(qqClient.loginStatus),
   logout: cast(qqClient.logout),
   getConfig,
@@ -311,6 +313,38 @@ export function createQqAdapter(
         );
       }
       return mapQqPlaylistToDetail(first as unknown as QqPlaylistBody, id);
+    },
+    async addSongToPlaylist(playlistId, trackId) {
+      const cfg = cfgOf(deps);
+      if (!cfg.cookie) {
+        throw new ProviderError(
+          "qq",
+          "LOGIN_REQUIRED",
+          `qq playlist ${playlistId} add-song requires cookie`,
+          { retryable: true, action: "login" }
+        );
+      }
+      const resp = await deps.addSongToPlaylist({ mid: trackId, dirid: playlistId }, cfg);
+      const body = asObj(resp.body) ?? {};
+      const codeRaw = body.result ?? body.code;
+      const code = typeof codeRaw === "number" ? codeRaw : Number(codeRaw);
+      if (code === 100 || code === 0) {
+        return { provider: "qq", playlistId, trackId, success: true, code };
+      }
+      if (code === 301 || code === 1000) {
+        throw new ProviderError(
+          "qq",
+          "LOGIN_REQUIRED",
+          `qq playlist ${playlistId} add-song requires cookie`,
+          { retryable: true, action: "login" }
+        );
+      }
+      const message = typeof body.errMsg === "string"
+        ? body.errMsg
+        : typeof body.message === "string"
+          ? body.message
+          : `qq playlist ${playlistId} add-song failed`;
+      throw new ProviderError("qq", "UNAVAILABLE", message);
     },
     async loginStatus(): Promise<ProviderLoginStatus> {
       const cfg = deps.getConfig();

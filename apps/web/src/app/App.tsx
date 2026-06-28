@@ -544,8 +544,8 @@ export function App({
 	}, [neteaseStatus?.loggedIn, openLoginModal, qqStatus?.loggedIn, searchQuery, showToast]);
 
 	const openCollectPicker = useCallback((track: Track) => {
-		if (track.provider !== "netease") {
-			showToast(track.provider === "qq" ? "QQ 音乐收藏到歌单待接口接入" : "当前来源暂不支持收藏到歌单");
+		if (track.provider !== "netease" && track.provider !== "qq") {
+			showToast("当前来源暂不支持收藏到歌单");
 			return;
 		}
 		if (!sidecarClient) {
@@ -584,7 +584,7 @@ export function App({
 			void refreshShelfPlaylists(client);
 		} catch (e) {
 			const message = e instanceof SidecarClientError && e.code === "LOGIN_REQUIRED"
-				? "登录后可同步到网易云"
+				? `登录后可同步到${track.provider === "qq" ? "QQ 音乐" : "网易云"}`
 				: e instanceof Error
 					? e.message
 					: "收藏失败";

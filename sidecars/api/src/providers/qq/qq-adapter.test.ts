@@ -44,6 +44,7 @@ function noopDeps(overrides: Partial<QqClientDeps>): QqClientDeps {
     userSonglists: call,
     userCollectSonglists: call,
     playlistDetail: call,
+    addSongToPlaylist: call,
     loginStatus: call,
     logout: call,
     getConfig: () => ({}),
@@ -386,6 +387,57 @@ test("playlistDetail with empty cdlist throws ProviderError UNAVAILABLE", async 
   const e = err as ProviderError;
   expect(e.code).toBe("UNAVAILABLE");
   expect(e.provider).toBe("qq");
+});
+
+test("addSongToPlaylist requires cookie and calls qq songlist add with mid and dirid", async () => {
+  const calls: unknown[] = [];
+  const deps = noopDeps({
+    getConfig: () => ({ cookie: "uin=o00123; qm_keyst=abc" }),
+    addSongToPlaylist: async (query, config) => {
+      calls.push({ query, config });
+      return { body: { result: 100, message: "添加成功" } };
+    }
+  });
+  const adapter = createQqAdapter(deps);
+
+  const ack = await adapter.addSongToPlaylist?.("201", "002Zkt5S2oAB7X");
+
+  expect(ack).toEqual({
+    provider: "qq",
+    playlistId: "201",
+    trackId: "002Zkt5S2oAB7X",
+    success: true,
+    code: 100
+  });
+  expect(calls).toEqual([
+    {
+      query: { mid: "002Zkt5S2oAB7X", dirid: "201" },
+      config: { cookie: "uin=o00123; qm_keyst=abc" }
+    }
+  ]);
+});
+
+test("addSongToPlaylist without cookie throws LOGIN_REQUIRED before qq call", async () => {
+  let calls = 0;
+  const deps = noopDeps({
+    getConfig: () => ({}),
+    addSongToPlaylist: async () => {
+      calls++;
+      return { body: {} };
+    }
+  });
+  const adapter = createQqAdapter(deps);
+
+  let err: unknown = null;
+  try {
+    await adapter.addSongToPlaylist?.("201", "002Zkt5S2oAB7X");
+  } catch (e) {
+    err = e;
+  }
+
+  expect(calls).toBe(0);
+  expect(err).toBeInstanceOf(ProviderError);
+  expect((err as ProviderError).code).toBe("LOGIN_REQUIRED");
 });
 
 test("loginStatus without MINERADIO_QQ_COOKIE returns loggedIn:false WITHOUT calling qq", async () => {
