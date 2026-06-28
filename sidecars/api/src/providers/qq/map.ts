@@ -24,9 +24,22 @@ export interface QqSong {
 
 export interface QqPlaylistBody {
   disstid?: number | string;
+  dissid?: number | string;
+  dirid?: number | string;
+  tid?: number | string;
+  id?: number | string;
   dissname?: string;
+  diss_name?: string;
+  name?: string;
+  title?: string;
   logo?: string;
+  diss_cover?: string;
+  picurl?: string;
+  cover?: string;
   total_song_num?: number;
+  song_cnt?: number;
+  songnum?: number;
+  song_count?: number;
   songlist?: QqSong[];
 }
 
@@ -128,7 +141,13 @@ export function mapQqPlaylistToSummary(
   raw: QqPlaylistBody,
   idHint?: string
 ): PlaylistSummary {
-  const idStr = raw && raw.disstid != null ? String(raw.disstid) : (idHint ?? "");
+  const rawId =
+    raw?.disstid ??
+    raw?.dissid ??
+    raw?.dirid ??
+    raw?.tid ??
+    raw?.id;
+  const idStr = rawId != null ? String(rawId) : (idHint ?? "");
   const trackIds: string[] = [];
   if (raw && Array.isArray(raw.songlist)) {
     for (const s of raw.songlist) {
@@ -141,9 +160,14 @@ export function mapQqPlaylistToSummary(
   return {
     provider: "qq",
     id: idStr,
-    name: raw?.dissname ?? "",
-    coverUrl: raw?.logo ?? "",
-    trackCount: typeof raw?.total_song_num === "number" ? raw.total_song_num : undefined,
+    name: raw?.dissname ?? raw?.diss_name ?? raw?.name ?? raw?.title ?? "",
+    coverUrl: raw?.logo ?? raw?.diss_cover ?? raw?.picurl ?? raw?.cover ?? "",
+    trackCount:
+      typeof raw?.total_song_num === "number" ? raw.total_song_num :
+      typeof raw?.song_cnt === "number" ? raw.song_cnt :
+      typeof raw?.songnum === "number" ? raw.songnum :
+      typeof raw?.song_count === "number" ? raw.song_count :
+      undefined,
     trackIds
   };
 }

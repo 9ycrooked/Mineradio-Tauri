@@ -19,6 +19,7 @@ const NETEASE_CAPABILITIES: ProviderCapability[] = [
   "search",
   "songUrl",
   "lyric",
+  "playlistList",
   "playlistDetail",
   "loginStatus",
   "logout"
@@ -28,6 +29,7 @@ const QQ_CAPABILITIES: ProviderCapability[] = [
   "search",
   "songUrl",
   "lyric",
+  "playlistList",
   "playlistDetail",
   "loginStatus",
   "logout"

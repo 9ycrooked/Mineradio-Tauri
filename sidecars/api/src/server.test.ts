@@ -423,9 +423,31 @@ test("POST /providers/qq/logout returns 501 action no-session when no cookie", a
   expect(b.error.provider).toBe("qq");
 });
 
-test("GET /providers/netease/playlists returns 501 NOT_IMPLEMENTED", async () => {
-  const r = await call("/providers/netease/playlists");
-  expect(r.status).toBe(501);
+test("GET /providers/netease/playlists calls adapter and returns playlist summaries", async () => {
+  const fakeNetease: ProviderAdapter = {
+    ...providers.netease,
+    async playlistList() {
+      return [
+        {
+          provider: "netease",
+          id: "p1",
+          name: "我的歌单",
+          coverUrl: "http://cover",
+          trackCount: 2,
+          trackIds: ["1", "2"]
+        }
+      ];
+    }
+  };
+  const handler = createRouteHandler({
+    providerAdapters: { ...providers, netease: fakeNetease }
+  });
+  const r = await handler(new Request("http://127.0.0.1/providers/netease/playlists"));
+  expect(r.status).toBe(200);
+  const b = await body(r);
+  expect(b.ok).toBe(true);
+  expect(b.data[0].id).toBe("p1");
+  expect(b.data[0].trackIds).toEqual(["1", "2"]);
 });
 
 test("GET /providers/netease/playlists/123 calls adapter (not 501 NOT_IMPLEMENTED)", async () => {

@@ -24,6 +24,7 @@ import { qqClient, getConfig } from "./qq-client";
 import {
   mapQqSongToTrack,
   mapQqLyricToPayload,
+  mapQqPlaylistToSummary,
   mapQqPlaylistToDetail,
   type QqSong,
   type QqPlaylistBody
@@ -41,6 +42,8 @@ export interface QqClientDeps {
   songDetail: QqCall;
   songUrl: QqCall;
   lyric: QqCall;
+  userSonglists: QqCall;
+  userCollectSonglists: QqCall;
   playlistDetail: QqCall;
   loginStatus: QqCall;
   logout: QqCall;
@@ -57,6 +60,8 @@ const defaultDeps: QqClientDeps = {
   songDetail: cast(qqClient.songDetail),
   songUrl: cast(qqClient.songUrl),
   lyric: cast(qqClient.lyric),
+  userSonglists: cast(qqClient.userSonglists),
+  userCollectSonglists: cast(qqClient.userCollectSonglists),
   playlistDetail: cast(qqClient.playlistDetail),
   loginStatus: cast(qqClient.loginStatus),
   logout: cast(qqClient.logout),
@@ -117,6 +122,68 @@ async function fallbackSmartboxSearch(keyword: string, limit: number): Promise<u
 function cfgOf(deps: QqClientDeps): { cookie?: string } {
   const cfg = deps.getConfig();
   return cfg.cookie ? { cookie: cfg.cookie } : {};
+}
+
+function parseCookieText(cookie: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const part of cookie.split(";")) {
+    const raw = part.trim();
+    const index = raw.indexOf("=");
+    if (index <= 0) continue;
+    const name = raw.slice(0, index).trim();
+    const value = raw.slice(index + 1).trim();
+    if (name) out[name] = value;
+  }
+  return out;
+}
+
+function qqUserIdFromCookie(cookie: string): string | null {
+  const obj = parseCookieText(cookie);
+  const loginType = Number(obj.login_type);
+  const raw =
+    loginType === 2
+      ? obj.wxuin ?? obj.uin ?? obj.p_uin
+      : obj.uin ?? obj.qqmusic_uin ?? obj.wxuin ?? obj.p_uin;
+  const digits = String(raw ?? "").replace(/\D/g, "");
+  return digits.length > 0 ? digits : null;
+}
+
+function readQqPlaylistList(body: unknown): unknown[] {
+  const root = asObj(body);
+  if (!root) return [];
+  if (Array.isArray(root.list)) return root.list;
+  const data = asObj(root.data);
+  if (data && Array.isArray(data.list)) return data.list;
+  if (data && Array.isArray(data.disslist)) return data.disslist;
+  if (data && Array.isArray(data.cdlist)) return data.cdlist;
+  return [];
+}
+
+function isQqFavoritePlaylist(pl: PlaylistSummary): boolean {
+  return /我喜欢|我的喜欢|喜欢的音乐/i.test(pl.name.trim());
+}
+
+function isQzoneBackgroundPlaylist(pl: PlaylistSummary, raw: unknown): boolean {
+  const obj = asObj(raw);
+  const creator =
+    typeof obj?.hostname === "string" ? obj.hostname :
+    typeof obj?.nick === "string" ? obj.nick :
+    typeof obj?.creator === "string" ? obj.creator :
+    "";
+  const text = `${pl.name} ${creator}`.toLowerCase();
+  return /qzone|空间|背景音乐/i.test(text);
+}
+
+function mapQqUserPlaylists(rawList: unknown[], seen: Set<string>): PlaylistSummary[] {
+  const out: PlaylistSummary[] = [];
+  for (const raw of rawList) {
+    const summary = mapQqPlaylistToSummary(raw as QqPlaylistBody);
+    if (!summary.id || !summary.name || seen.has(summary.id)) continue;
+    if (isQzoneBackgroundPlaylist(summary, raw)) continue;
+    seen.add(summary.id);
+    out.push(summary);
+  }
+  return out;
 }
 
 const QQ_QUALITY_META = {
@@ -213,7 +280,22 @@ export function createQqAdapter(
       });
     },
     async playlistList(): Promise<PlaylistSummary[]> {
-      throw new ProviderNotImplementedError("qq", "playlist-list-deferred");
+      const cfg = cfgOf(deps);
+      if (!cfg.cookie) return [];
+      const userId = qqUserIdFromCookie(cfg.cookie);
+      if (!userId) return [];
+      const [createdRaw, collectedRaw] = await Promise.allSettled([
+        deps.userSonglists({ id: userId }, cfg),
+        deps.userCollectSonglists({ id: userId, pageNo: 1, pageSize: 80 }, cfg)
+      ]);
+      const seen = new Set<string>();
+      const created = createdRaw.status === "fulfilled"
+        ? mapQqUserPlaylists(readQqPlaylistList(createdRaw.value.body), seen)
+        : [];
+      const collected = collectedRaw.status === "fulfilled"
+        ? mapQqUserPlaylists(readQqPlaylistList(collectedRaw.value.body), seen)
+        : [];
+      return created.concat(collected).sort((a, b) => Number(isQqFavoritePlaylist(b)) - Number(isQqFavoritePlaylist(a)));
     },
     async playlistDetail(id): Promise<PlaylistDetail> {
       const cfg = cfgOf(deps);

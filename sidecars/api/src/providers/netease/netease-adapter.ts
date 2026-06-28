@@ -16,6 +16,7 @@ import { hanaClient, getConfig } from "./hana-client";
 import {
   mapHanaSongToTrack,
   mapHanaLyricToPayload,
+  mapHanaPlaylistToSummary,
   mapHanaPlaylistToDetail,
   mapPlayable,
   type HanaSong,
@@ -37,6 +38,7 @@ export interface NeteaseHanaDeps {
   lyricNew: NeteaseHanaCall;
   playlistDetail: NeteaseHanaCall;
   playlistCatlist: NeteaseHanaCall;
+  userPlaylist: NeteaseHanaCall;
   loginStatus: NeteaseHanaCall;
   logout: NeteaseHanaCall;
   getConfig(): { cookie?: string };
@@ -54,6 +56,7 @@ const defaultDeps: NeteaseHanaDeps = {
   lyricNew: cast(hanaClient.lyricNew),
   playlistDetail: cast(hanaClient.playlistDetail),
   playlistCatlist: cast(hanaClient.playlistCatlist),
+  userPlaylist: cast(hanaClient.userPlaylist),
   loginStatus: cast(hanaClient.loginStatus),
   logout: cast(hanaClient.logout),
   getConfig
@@ -69,6 +72,21 @@ function asObj(v: unknown): Record<string, unknown> | null {
 function cfgOf(deps: NeteaseHanaDeps): { cookie?: string } {
   const cfg = deps.getConfig();
   return cfg.cookie ? { cookie: cfg.cookie } : {};
+}
+
+async function loginStatusOf(deps: NeteaseHanaDeps): Promise<ProviderLoginStatus> {
+  const cfg = deps.getConfig();
+  if (!cfg.cookie) return { provider: "netease", loggedIn: false };
+  const resp = await deps.loginStatus({}, { cookie: cfg.cookie });
+  const body = asObj(resp.body);
+  const data = body ? asObj(body.data) : null;
+  const profile = data ? asObj(data.profile) : null;
+  if (!profile) return { provider: "netease", loggedIn: false };
+  const nickname = typeof profile.nickname === "string" ? profile.nickname : undefined;
+  const avatarUrl = typeof profile.avatarUrl === "string" ? profile.avatarUrl : undefined;
+  const userId =
+    profile.userId != null ? String(profile.userId) : undefined;
+  return { provider: "netease", loggedIn: true, nickname, avatarUrl, userId };
 }
 
 const STATE_TO_CODE: Record<string, string> = {
@@ -187,7 +205,17 @@ export function createNeteaseAdapter(
       });
     },
     async playlistList(): Promise<PlaylistSummary[]> {
-      throw new ProviderNotImplementedError("netease", "playlist-list-deferred");
+      const cfg = cfgOf(deps);
+      if (!cfg.cookie) return [];
+      const status = await loginStatusOf(deps);
+      if (!status.loggedIn || !status.userId) return [];
+      const resp = await deps.userPlaylist(
+        { uid: status.userId, limit: 60 },
+        cfg
+      );
+      const body = asObj(resp.body);
+      const list = body && Array.isArray(body.playlist) ? body.playlist : [];
+      return list.map(pl => mapHanaPlaylistToSummary(pl as unknown as HanaPlaylistBody));
     },
     async playlistDetail(id): Promise<PlaylistDetail> {
       const cfg = cfgOf(deps);
@@ -204,18 +232,7 @@ export function createNeteaseAdapter(
       return mapHanaPlaylistToDetail(pl as unknown as HanaPlaylistBody, id);
     },
     async loginStatus(): Promise<ProviderLoginStatus> {
-      const cfg = deps.getConfig();
-      if (!cfg.cookie) return { provider: "netease", loggedIn: false };
-      const resp = await deps.loginStatus({}, { cookie: cfg.cookie });
-      const body = asObj(resp.body);
-      const data = body ? asObj(body.data) : null;
-      const profile = data ? asObj(data.profile) : null;
-      if (!profile) return { provider: "netease", loggedIn: false };
-      const nickname = typeof profile.nickname === "string" ? profile.nickname : undefined;
-      const avatarUrl = typeof profile.avatarUrl === "string" ? profile.avatarUrl : undefined;
-      const userId =
-        profile.userId != null ? String(profile.userId) : undefined;
-      return { provider: "netease", loggedIn: true, nickname, avatarUrl, userId };
+      return loginStatusOf(deps);
     },
     async logout(): Promise<void> {
       const cfg = deps.getConfig();

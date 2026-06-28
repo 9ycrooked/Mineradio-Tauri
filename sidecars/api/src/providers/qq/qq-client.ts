@@ -62,6 +62,8 @@ export const qqClient = {
   songDetail: wrap("song"),
   songUrl: wrap("song/url"),
   lyric: wrap("lyric"),
+  userSonglists: wrap("user/songlist"),
+  userCollectSonglists: wrap("user/collect/songlist"),
   playlistDetail: wrap("songlist"),
   loginStatus: wrap("user"),
   logout: wrap("user")

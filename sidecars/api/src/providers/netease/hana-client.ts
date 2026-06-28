@@ -6,6 +6,7 @@ import {
   lyricNew,
   playlistDetail,
   playlistCatlist,
+  userPlaylist,
   loginStatus,
   logout
 } from "hana-music-api";
@@ -29,6 +30,7 @@ export const hanaClient = {
   lyricNew,
   playlistDetail,
   playlistCatlist,
+  userPlaylist,
   loginStatus,
   logout
 } as const;

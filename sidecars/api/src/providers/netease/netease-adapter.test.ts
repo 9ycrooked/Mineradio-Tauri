@@ -44,6 +44,7 @@ function noopDeps(overrides: Partial<NeteaseHanaDeps>): NeteaseHanaDeps {
     lyricNew: call,
     playlistDetail: call,
     playlistCatlist: call,
+    userPlaylist: call,
     loginStatus: call,
     logout: call,
     getConfig: () => ({}),
@@ -272,16 +273,63 @@ test("logout with cookie calls hana logout", async () => {
   });
 });
 
-test("playlistList deferred throws ProviderNotImplementedError action playlist-list-deferred", async () => {
-  const adapter = createNeteaseAdapter(noopDeps({}));
-  let err: unknown = null;
-  try {
-    await adapter.playlistList();
-  } catch (e) {
-    err = e;
-  }
-  expect(err).toBeInstanceOf(ProviderNotImplementedError);
-  const e = err as ProviderNotImplementedError;
-  expect(e.provider).toBe("netease");
-  expect(e.action).toBe("playlist-list-deferred");
+test("playlistList without cookie returns empty list without calling hana", async () => {
+  let calls = 0;
+  const adapter = createNeteaseAdapter(noopDeps({
+    getConfig: () => ({}),
+    loginStatus: async () => { calls++; return { body: {} }; },
+    userPlaylist: async () => { calls++; return { body: {} }; }
+  }));
+  const out = await adapter.playlistList();
+  expect(out).toEqual([]);
+  expect(calls).toBe(0);
+});
+
+test("playlistList uses logged-in user id and maps userPlaylist payload", async () => {
+  const queries: Record<string, unknown>[] = [];
+  const adapter = createNeteaseAdapter(noopDeps({
+    getConfig: () => ({ cookie: "MUSIC_U=demo" }),
+    loginStatus: async (query) => {
+      queries.push(query);
+      return {
+        body: { data: { profile: { userId: 42, nickname: "n" } } }
+      };
+    },
+    userPlaylist: async (query) => {
+      queries.push(query);
+      return {
+        body: {
+          playlist: [
+            {
+              id: 101,
+              name: "我喜欢的音乐",
+              coverImgUrl: "http://cover/like.jpg",
+              trackCount: 12,
+              trackIds: [{ id: 1 }, { id: 2 }]
+            },
+            {
+              id: 102,
+              name: "收藏歌单",
+              coverImgUrl: "http://cover/coll.jpg",
+              trackCount: 3
+            }
+          ]
+        }
+      };
+    }
+  }));
+
+  const out = await adapter.playlistList();
+  expect(queries[1]["uid"]).toBe("42");
+  expect(queries[1]["limit"]).toBe(60);
+  expect(out.length).toBe(2);
+  expect(out[0]).toEqual({
+    provider: "netease",
+    id: "101",
+    name: "我喜欢的音乐",
+    coverUrl: "http://cover/like.jpg",
+    trackCount: 12,
+    trackIds: ["1", "2"]
+  });
+  expect(out[1].id).toBe("102");
 });

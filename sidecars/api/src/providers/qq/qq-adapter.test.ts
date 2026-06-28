@@ -41,6 +41,8 @@ function noopDeps(overrides: Partial<QqClientDeps>): QqClientDeps {
     songDetail: call,
     songUrl: call,
     lyric: call,
+    userSonglists: call,
+    userCollectSonglists: call,
     playlistDetail: call,
     loginStatus: call,
     logout: call,
@@ -250,18 +252,86 @@ test("lyric with no trans returns hasTranslation false", async () => {
   expect(out.hasTranslation).toBe(false);
 });
 
-test("playlistList deferred throws ProviderNotImplementedError action playlist-list-deferred", async () => {
-  const adapter = createQqAdapter(noopDeps({}));
-  let err: unknown = null;
-  try {
-    await adapter.playlistList();
-  } catch (e) {
-    err = e;
-  }
-  expect(err).toBeInstanceOf(ProviderNotImplementedError);
-  const e = err as ProviderNotImplementedError;
-  expect(e.provider).toBe("qq");
-  expect(e.action).toBe("playlist-list-deferred");
+test("playlistList without cookie returns empty list without calling qq", async () => {
+  let calls = 0;
+  const adapter = createQqAdapter(noopDeps({
+    getConfig: () => ({}),
+    userSonglists: async () => { calls++; return { body: {} }; },
+    userCollectSonglists: async () => { calls++; return { body: {} }; }
+  }));
+
+  const out = await adapter.playlistList();
+  expect(out).toEqual([]);
+  expect(calls).toBe(0);
+});
+
+test("playlistList merges created and collected QQ playlists, filters qzone, and sorts favorites first", async () => {
+  const queries: Record<string, unknown>[] = [];
+  const adapter = createQqAdapter(noopDeps({
+    getConfig: () => ({ cookie: "uin=o00123; qqmusic_key=abc" }),
+    userSonglists: async (query) => {
+      queries.push(query);
+      return {
+        body: {
+          list: [
+            {
+              dirid: 201,
+              diss_name: "我喜欢",
+              diss_cover: "http://cover/like.jpg",
+              song_cnt: 8,
+              listen_num: 1,
+              hostname: "me"
+            },
+            {
+              dissid: "300",
+              diss_name: "空间背景音乐",
+              diss_cover: "http://cover/qzone.jpg",
+              song_cnt: 1,
+              hostname: "Qzone"
+            }
+          ]
+        }
+      };
+    },
+    userCollectSonglists: async (query) => {
+      queries.push(query);
+      return {
+        body: {
+          list: [
+            {
+              dissid: "301",
+              diss_name: "收藏歌单",
+              diss_cover: "http://cover/coll.jpg",
+              song_cnt: 3,
+              nick: "friend"
+            },
+            {
+              dissid: "301",
+              diss_name: "收藏歌单重复",
+              diss_cover: "http://cover/dup.jpg",
+              song_cnt: 4,
+              nick: "friend"
+            }
+          ]
+        }
+      };
+    }
+  }));
+
+  const out = await adapter.playlistList();
+  expect(queries[0]["id"]).toBe("00123");
+  expect(queries[1]["id"]).toBe("00123");
+  expect(out.length).toBe(2);
+  expect(out[0]).toEqual({
+    provider: "qq",
+    id: "201",
+    name: "我喜欢",
+    coverUrl: "http://cover/like.jpg",
+    trackCount: 8,
+    trackIds: []
+  });
+  expect(out[1].id).toBe("301");
+  expect(out[1].name).toBe("收藏歌单");
 });
 
 test("playlistDetail maps body.cdlist[0] into PlaylistDetail", async () => {
