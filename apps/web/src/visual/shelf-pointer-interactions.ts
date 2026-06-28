@@ -36,6 +36,7 @@ export interface ShelfPointerInteractionOptions {
 	getViewportHeight: () => number;
 	getShelfPresence?: () => string | null | undefined;
 	getShelfPreviewActive?: () => boolean;
+	setShelfMode?: (mode: "side") => void;
 	onShelfPlayQueueIndex?: (index: number) => void;
 	onOpenQueuePanel?: () => void;
 }
@@ -279,9 +280,14 @@ export function attachShelfPointerInteractionWiring(
 		if (opts.getSplashActive()) return;
 		if (isShelfInteractionUiTarget(event.target)) return;
 		if (!isShelfInteractionBackgroundTarget(event.target)) return;
-		if (opts.shelfManager.getMode() !== "side") return;
+		let mode = opts.shelfManager.getMode();
+		if (mode !== "side" && mode !== "off") return;
 		event.preventDefault();
 		event.stopPropagation?.();
+		if (mode === "off") {
+			opts.setShelfMode?.("side");
+			mode = "side";
+		}
 		const focusSide = (): void => {
 			opts.cinema.setFocusZone("shelf-side", {
 				immediate: true,

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, type ReactElement, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, type ReactElement, type RefObject } from "react";
 import type { LyricPayload, LyricLine as SharedLyricLine, Track } from "@mineradio/shared";
 import {
 	type FxState,
@@ -33,6 +33,25 @@ function mapLyricPayload(payload: LyricPayload | null): VisualLyricLine[] {
 	}));
 }
 
+export function resolveRuntimeShelfMode(
+	defaultMode: string | null | undefined,
+	runtimeOverride: string | null | undefined,
+): string {
+	if (runtimeOverride && (!defaultMode || defaultMode === "off")) return runtimeOverride;
+	return defaultMode ?? "side";
+}
+
+export function syncRuntimeShelfModeOverride(
+	previousDefaultRef: { current: string | undefined },
+	runtimeOverrideRef: { current: string | null },
+	defaultMode: string | undefined,
+): void {
+	if (previousDefaultRef.current !== defaultMode) {
+		runtimeOverrideRef.current = null;
+		previousDefaultRef.current = defaultMode;
+	}
+}
+
 export function VisualEngineHost(props: VisualEngineHostProps): ReactElement {
 	const hostRef = useRef<HTMLDivElement | null>(null);
 	const positionRef = useRef<number>(props.positionMs);
@@ -42,6 +61,8 @@ export function VisualEngineHost(props: VisualEngineHostProps): ReactElement {
 	const shelfItemsVersionRef = useRef<number>(0);
 	const splashActiveRef = useRef<boolean>(props.splashActive ?? false);
 	const shelfModeRef = useRef<string>(props.fxDefaults?.shelf ?? "side");
+	const runtimeShelfModeOverrideRef = useRef<string | null>(null);
+	const previousDefaultShelfModeRef = useRef<string | undefined>(props.fxDefaults?.shelf);
 	const shelfCameraModeRef = useRef<string>(props.fxDefaults?.shelfCameraMode ?? "static");
 	const shelfPresenceRef = useRef<string>(props.fxDefaults?.shelfPresence ?? "always");
 	const wallpaperSafeRef = useRef<boolean>(isWallpaperSafeShelfPreset(props.fxDefaults?.preset));
@@ -51,11 +72,21 @@ export function VisualEngineHost(props: VisualEngineHostProps): ReactElement {
 	positionRef.current = props.positionMs;
 	isPlayingRef.current = props.isPlaying;
 	splashActiveRef.current = props.splashActive ?? false;
-	shelfModeRef.current = props.fxDefaults?.shelf ?? "side";
+	syncRuntimeShelfModeOverride(
+		previousDefaultShelfModeRef,
+		runtimeShelfModeOverrideRef,
+		props.fxDefaults?.shelf,
+	);
+	shelfModeRef.current = resolveRuntimeShelfMode(props.fxDefaults?.shelf, runtimeShelfModeOverrideRef.current);
 	shelfCameraModeRef.current = props.fxDefaults?.shelfCameraMode ?? "static";
 	shelfPresenceRef.current = props.fxDefaults?.shelfPresence ?? "always";
 	wallpaperSafeRef.current = isWallpaperSafeShelfPreset(props.fxDefaults?.preset);
 	onShelfPlayQueueIndexRef.current = props.onShelfPlayQueueIndex;
+
+	const handleShelfModeChange = useCallback((mode: "side") => {
+		runtimeShelfModeOverrideRef.current = mode;
+		shelfModeRef.current = mode;
+	}, []);
 
 	const nextShelfItems = useMemo(
 		() => mapQueueToShelfItems(props.queue ?? [], props.currentTrack ?? null),
@@ -95,6 +126,7 @@ export function VisualEngineHost(props: VisualEngineHostProps): ReactElement {
 		lifecycleRef,
 		coverResolution: props.coverResolution ?? 1.55,
 		fxDefaults: props.fxDefaults,
+		onShelfModeChange: handleShelfModeChange,
 	});
 
 	return <div id="visual-host" className="visual-host" ref={hostRef} />;

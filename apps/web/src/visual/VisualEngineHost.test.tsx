@@ -1,7 +1,11 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import React from "react";
-import { VisualEngineHost } from "./VisualEngineHost";
+import {
+	resolveRuntimeShelfMode,
+	syncRuntimeShelfModeOverride,
+	VisualEngineHost,
+} from "./VisualEngineHost";
 
 test("VisualEngineHost server-renders a visual-host placeholder div without invoking WebGL/AudioContext", () => {
 	const html = renderToStaticMarkup(
@@ -15,4 +19,20 @@ test("VisualEngineHost server-renders a visual-host placeholder div without invo
 	);
 	expect(html).toContain('id="visual-host"');
 	expect(html).not.toContain("canvas");
+});
+
+test("resolveRuntimeShelfMode keeps runtime side promotion across default off rerenders", () => {
+	expect(resolveRuntimeShelfMode("off", "side")).toBe("side");
+	expect(resolveRuntimeShelfMode("off", null)).toBe("off");
+	expect(resolveRuntimeShelfMode(undefined, "side")).toBe("side");
+});
+
+test("syncRuntimeShelfModeOverride clears runtime override when default shelf prop changes", () => {
+	const previousDefaultRef = { current: "off" as string | undefined };
+	const overrideRef = { current: "side" as string | null };
+	syncRuntimeShelfModeOverride(previousDefaultRef, overrideRef, "off");
+	expect(overrideRef.current).toBe("side");
+	syncRuntimeShelfModeOverride(previousDefaultRef, overrideRef, "stage");
+	expect(overrideRef.current).toBeNull();
+	expect(previousDefaultRef.current).toBe("stage");
 });

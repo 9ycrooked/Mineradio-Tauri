@@ -1261,15 +1261,68 @@ test("attachShelfPointerInteractionWiring contextmenu toggles side pinned state 
 	]);
 });
 
-test("attachShelfPointerInteractionWiring contextmenu ignores UI splash stage and off mode for this slice", () => {
+test("attachShelfPointerInteractionWiring contextmenu promotes off mode to side, pins open, and focuses side", () => {
 	const target = new FakePointerTarget();
 	const pinnedCalls: boolean[] = [];
+	const modeCalls: string[] = [];
+	const focus: unknown[] = [];
+	let mode: "side" | "off" = "off";
+	let pinnedOpen = false;
+	const cleanup = attachShelfPointerInteractionWiring({
+		target,
+		shelfManager: makeShelfManagerMock({
+			getMode: () => mode,
+			getSnapshot: () => ({
+				...closedSnapshot(),
+				mode,
+				pinnedOpen,
+			}),
+			setSelectedIdx: () => {},
+			clearSelected: () => {},
+			getCenterIdx: () => 0,
+			scrollBy: () => {},
+			openDetail: () => {},
+			getShelfPinnedOpen: () => pinnedOpen,
+			setShelfPinnedOpen: (open) => {
+				pinnedOpen = open;
+				pinnedCalls.push(open);
+			},
+		}),
+		cinema: { setFocusZone: (type, opts) => focus.push([type, opts]) },
+		getHit: () => null,
+		getSplashActive: () => false,
+		getPortrait: () => true,
+		getWallpaperSafe: () => false,
+		getViewportWidth: () => 1200,
+		getViewportHeight: () => 900,
+		setShelfMode: (nextMode) => {
+			mode = nextMode;
+			modeCalls.push(nextMode);
+		},
+	});
+
+	const off = makeContextMenuEvent({});
+	target.emit("contextmenu", off);
+	cleanup();
+
+	expect(off.calls).toEqual(["preventDefault", "stopPropagation"]);
+	expect(modeCalls).toEqual(["side"]);
+	expect(pinnedCalls).toEqual([true]);
+	expect(focus).toEqual([
+		["shelf-side", { immediate: true, portrait: true, wallpaperSafe: false }],
+	]);
+});
+
+test("attachShelfPointerInteractionWiring contextmenu ignores UI splash and stage mode", () => {
+	const target = new FakePointerTarget();
+	const pinnedCalls: boolean[] = [];
+	const modeCalls: string[] = [];
 	const button = {
 		matches: (selector: string) => selector.split(",").includes("button"),
 		closest: (selector: string) => selector.split(",").includes("button") ? button : null,
 	};
 	let splashActive = false;
-	let mode: "side" | "stage" | "off" = "side";
+	let mode: "side" | "stage" = "side";
 	const cleanup = attachShelfPointerInteractionWiring({
 		target,
 		shelfManager: makeShelfManagerMock({
@@ -1293,6 +1346,7 @@ test("attachShelfPointerInteractionWiring contextmenu ignores UI splash stage an
 		getWallpaperSafe: () => false,
 		getViewportWidth: () => 1200,
 		getViewportHeight: () => 900,
+		setShelfMode: (nextMode) => modeCalls.push(nextMode),
 	});
 
 	const ui = makeContextMenuEvent({ target: button });
@@ -1304,16 +1358,13 @@ test("attachShelfPointerInteractionWiring contextmenu ignores UI splash stage an
 	mode = "stage";
 	const stage = makeContextMenuEvent({});
 	target.emit("contextmenu", stage);
-	mode = "off";
-	const off = makeContextMenuEvent({});
-	target.emit("contextmenu", off);
 	cleanup();
 
 	expect(pinnedCalls).toEqual([]);
+	expect(modeCalls).toEqual([]);
 	expect(ui.calls).toEqual([]);
 	expect(splash.calls).toEqual([]);
 	expect(stage.calls).toEqual([]);
-	expect(off.calls).toEqual([]);
 });
 
 test("attachShelfPointerInteractionWiring contextmenu closes open detail, pins side shelf, and focuses side", () => {

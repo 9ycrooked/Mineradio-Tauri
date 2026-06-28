@@ -51,6 +51,7 @@ export interface VisualEngineRefs {
 	lifecycleRef: RefObject<StageLyricsLifecycle | null>;
 	coverResolution: number;
 	fxDefaults?: Partial<FxState>;
+	onShelfModeChange?: (mode: "side") => void;
 }
 
 interface MountedHandles {
@@ -199,6 +200,15 @@ export function isRuntimeShelfPreviewActive(
 	shelfVisibility: number,
 ): boolean {
 	return presence === "auto" && shelfVisibility > 0.16;
+}
+
+export function setRuntimeShelfMode(
+	shelfModeRef: RefObject<string> | undefined,
+	mode: "side",
+	onShelfModeChange?: (mode: "side") => void,
+): void {
+	if (shelfModeRef) shelfModeRef.current = mode;
+	onShelfModeChange?.(mode);
 }
 
 function disposeHandles(handles: MountedHandles | null): void {
@@ -470,6 +480,7 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 					const presence = refs.shelfPresenceRef?.current ?? refs.fxDefaults?.shelfPresence ?? "always";
 					return isRuntimeShelfPreviewActive(presence, shelfManager.getShelfVisibility());
 				},
+				setShelfMode: (mode) => setRuntimeShelfMode(refs.shelfModeRef, mode, refs.onShelfModeChange),
 				onShelfPlayQueueIndex: (index) => refs.onShelfPlayQueueIndexRef?.current?.(index),
 			});
 			handles = {
@@ -501,5 +512,5 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 			handles = null;
 			refs.lifecycleRef.current = null;
 		};
-	}, [refs.hostRef, refs.audioElementRef, refs.positionRef, refs.isPlayingRef, refs.lyricLinesRef, refs.shelfItemsRef, refs.shelfItemsVersionRef, refs.splashActiveRef, refs.shelfModeRef, refs.shelfCameraModeRef, refs.shelfPresenceRef, refs.wallpaperSafeRef, refs.onShelfPlayQueueIndexRef, refs.lifecycleRef, refs.coverResolution]);
+	}, [refs.hostRef, refs.audioElementRef, refs.positionRef, refs.isPlayingRef, refs.lyricLinesRef, refs.shelfItemsRef, refs.shelfItemsVersionRef, refs.splashActiveRef, refs.shelfModeRef, refs.shelfCameraModeRef, refs.shelfPresenceRef, refs.wallpaperSafeRef, refs.onShelfPlayQueueIndexRef, refs.lifecycleRef, refs.coverResolution, refs.onShelfModeChange]);
 }
