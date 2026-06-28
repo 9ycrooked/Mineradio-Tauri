@@ -7,9 +7,10 @@ import { usePlaybackStore } from "../stores/playback-store";
 import { useProviderStore } from "../stores/provider-store";
 import { useSearchStore } from "../stores/search-store";
 import { useUiStore } from "../stores/ui-store";
-import { getRuntimeConfig, importJsonFile, type RuntimeConfig } from "../tauri/runtime";
+import { getRuntimeConfig, getSidecarStatus, importJsonFile, type RuntimeConfig, type SidecarStatus } from "../tauri/runtime";
 import { BottomControlsHost } from "../components/shell/BottomControlsHost";
 import { SearchShell } from "../components/shell/SearchShell";
+import { SidecarRecoveryNotice, type SidecarRecoveryNoticeState } from "../components/shell/SidecarRecoveryNotice";
 import { TopRightControls } from "../components/shell/TopRightControls";
 import { EmptyHomeHost } from "../home/EmptyHomeHost";
 import { SplashHost, type SplashHostProps } from "../visual/SplashHost";
@@ -18,6 +19,8 @@ import { createShelfDetailContentLoader, playShelfDetailRow } from "../visual/sh
 import type { ProviderId, ProviderLoginStatus } from "@mineradio/shared";
 
 const SHOW_SPLASH = import.meta.env.VITE_SPLASH !== "0";
+const SIDECAR_STATUS_POLL_MS = 1500;
+const SIDECAR_RECOVERED_NOTICE_MS = 2600;
 
 function placeholderRuntimeConfig(): RuntimeConfig {
 	return {
@@ -81,6 +84,24 @@ export function shouldShowEmptyHome(input: EmptyHomeStateInput): boolean {
 	return true;
 }
 
+export function deriveSidecarRecoveryNoticeState(
+	status: SidecarStatus,
+	previous: SidecarRecoveryNoticeState | null
+): SidecarRecoveryNoticeState {
+	const recovered = status.phase === "ready" && !!previous && (
+		previous.phase === "recovering" ||
+		previous.phase === "stopped" ||
+		previous.phase === "error" ||
+		status.restarts > previous.restarts
+	);
+	return {
+		phase: status.phase,
+		restarts: status.restarts,
+		lastError: status.lastError,
+		recovered,
+	};
+}
+
 export type AppProps = {
 	SplashComponent?: (props: SplashHostProps) => ReactElement | null;
 };
@@ -94,6 +115,7 @@ export function App({ SplashComponent = SplashHost }: AppProps = {}): ReactEleme
 	const [qqStatus, setQqStatus] = useState<ProviderLoginStatus | null>(null);
 	const [homeForcedOpen, setHomeForcedOpen] = useState(false);
 	const [homeSuppressed, setHomeSuppressed] = useState(false);
+	const [sidecarRecoveryState, setSidecarRecoveryState] = useState<SidecarRecoveryNoticeState | null>(null);
 
 	const currentTrack = usePlaybackStore((s) => s.currentTrack);
 	const queue = usePlaybackStore((s) => s.queue);
@@ -393,6 +415,43 @@ export function App({ SplashComponent = SplashHost }: AppProps = {}): ReactEleme
 	}, [clearToast, toast]);
 
 	useEffect(() => {
+		if (!sidecarBaseUrl) return;
+		let cancelled = false;
+		let pollTimer: ReturnType<typeof setTimeout> | null = null;
+		let clearRecoveredTimer: ReturnType<typeof setTimeout> | null = null;
+
+		async function pollStatus(): Promise<void> {
+			try {
+				const status = await getSidecarStatus();
+				if (cancelled) return;
+				setSidecarRecoveryState((previous) => {
+					const next = deriveSidecarRecoveryNoticeState(status, previous);
+					if (next.recovered) {
+						if (clearRecoveredTimer) clearTimeout(clearRecoveredTimer);
+						clearRecoveredTimer = setTimeout(() => {
+							setSidecarRecoveryState((current) => current?.recovered ? { ...current, recovered: false } : current);
+						}, SIDECAR_RECOVERED_NOTICE_MS);
+					}
+					return next;
+				});
+			} finally {
+				if (!cancelled) {
+					pollTimer = setTimeout(() => {
+						void pollStatus();
+					}, SIDECAR_STATUS_POLL_MS);
+				}
+			}
+		}
+
+		void pollStatus();
+		return () => {
+			cancelled = true;
+			if (pollTimer) clearTimeout(pollTimer);
+			if (clearRecoveredTimer) clearTimeout(clearRecoveredTimer);
+		};
+	}, [sidecarBaseUrl]);
+
+	useEffect(() => {
 		if (!miniQueueOpen || typeof document === "undefined") return;
 		const closeOnPointerDown = (event: PointerEvent) => {
 			const target = event.target;
@@ -651,6 +710,7 @@ export function App({ SplashComponent = SplashHost }: AppProps = {}): ReactEleme
 				volume={volume}
 				muted={muted}
 			/>
+			{sidecarRecoveryState ? <SidecarRecoveryNotice state={sidecarRecoveryState} /> : null}
 			{loginModalOpen ? (
 				<div id="login-modal" className="modal-mask show" role="presentation" onClick={(event) => {
 					if (event.target === event.currentTarget) closeLoginModal();

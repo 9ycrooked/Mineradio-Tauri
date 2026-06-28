@@ -3,8 +3,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
-import { App, isHomeBlankDismissElement, shouldShowEmptyHome } from "./App";
+import { App, deriveSidecarRecoveryNoticeState, isHomeBlankDismissElement, shouldShowEmptyHome } from "./App";
 import type { SplashHostProps } from "../visual/SplashHost";
+import type { SidecarStatus } from "../tauri/runtime";
 
 test("App keeps the empty-home music page mounted behind the splash gate", () => {
 	const html = renderToStaticMarkup(React.createElement(App));
@@ -75,4 +76,35 @@ test("shouldShowEmptyHome follows baseline force/suppress/playback gates", () =>
 	expect(shouldShowEmptyHome({ ...base, shelfPinnedOpen: true })).toBe(false);
 	expect(shouldShowEmptyHome({ ...base, splashActive: true, homeForcedOpen: true })).toBe(false);
 	expect(shouldShowEmptyHome({ ...base, hasCurrentTrack: true, homeForcedOpen: true })).toBe(true);
+});
+
+function sidecarStatus(overrides: Partial<SidecarStatus> = {}): SidecarStatus {
+	return {
+		phase: "ready",
+		baseUrl: "http://127.0.0.1:40000",
+		pid: 1,
+		restarts: 0,
+		lastError: null,
+		lastHealthOkMs: 10,
+		providers: ["netease", "qq"],
+		logPath: "",
+		...overrides,
+	};
+}
+
+test("deriveSidecarRecoveryNoticeState only marks ready as recovered after an unhealthy phase or restart", () => {
+	const firstReady = deriveSidecarRecoveryNoticeState(sidecarStatus(), null);
+	expect(firstReady.recovered).toBe(false);
+	expect(firstReady.phase).toBe("ready");
+
+	const recovering = deriveSidecarRecoveryNoticeState(sidecarStatus({ phase: "recovering", restarts: 1 }), firstReady);
+	expect(recovering.recovered).toBe(false);
+	expect(recovering.phase).toBe("recovering");
+
+	const recovered = deriveSidecarRecoveryNoticeState(sidecarStatus({ phase: "ready", restarts: 1 }), recovering);
+	expect(recovered.recovered).toBe(true);
+	expect(recovered.restarts).toBe(1);
+
+	const restartedWhileReady = deriveSidecarRecoveryNoticeState(sidecarStatus({ phase: "ready", restarts: 2 }), firstReady);
+	expect(restartedWhileReady.recovered).toBe(true);
 });
