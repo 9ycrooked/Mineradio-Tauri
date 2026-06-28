@@ -124,6 +124,11 @@ export interface ShelfContentScreenPanel {
 	bounds: ShelfContentScreenBounds;
 }
 
+export interface ShelfContentScreenTargets {
+	rows?: ShelfContentScreenRow[];
+	panel?: ShelfContentScreenPanel | null;
+}
+
 export interface PickShelfContentRowAtScreenOptions {
 	padX?: number;
 	padY?: number;
@@ -161,6 +166,11 @@ export interface ShelfContentList {
 	advance(now: number, dt?: number): void;
 	computeRenderWindow(): ShelfContentRenderWindow;
 	computeRowLayout(rowIndex: number, inputs: ShelfContentRowLayoutInputs): ShelfContentRowLayout;
+	setScreenTargets(targets: ShelfContentScreenTargets): void;
+	clearScreenTargets(): void;
+	pickRowAtScreen(pointer: ShelfContentScreenPoint): ShelfContentScreenRowPick | null;
+	screenContainsPanel(pointer: ShelfContentScreenPoint): boolean;
+	hasScreenTargetAt(pointer: ShelfContentScreenPoint): boolean;
 	getSnapshot(): ShelfContentSnapshot;
 }
 
@@ -178,9 +188,17 @@ export function createShelfContentList(opts: ShelfContentListOptions = {}): Shel
 	let requestToken = 0;
 	let openAnimAt = -10;
 	let rowAnimAt = -10;
+	let screenRows: ShelfContentScreenRow[] = [];
+	let screenPanel: ShelfContentScreenPanel | null = null;
+
+	const clearScreenTargets = () => {
+		screenRows = [];
+		screenPanel = null;
+	};
 
 	return {
 		open(openOpts) {
+			clearScreenTargets();
 			openState = true;
 			playlistId = openOpts.playlistId;
 			playlistTitle = openOpts.title;
@@ -196,6 +214,7 @@ export function createShelfContentList(opts: ShelfContentListOptions = {}): Shel
 			return requestToken;
 		},
 		setRows(nextRows, kind) {
+			clearScreenTargets();
 			rows = nextRows.map(cloneRow);
 			if (kind) contentKind = kind;
 			centerTarget = 0;
@@ -204,6 +223,7 @@ export function createShelfContentList(opts: ShelfContentListOptions = {}): Shel
 			rowAnimAt = nowFn();
 		},
 		setLoading() {
+			clearScreenTargets();
 			rows = [makePlaceholderRow("加载中…", "loading")];
 			centerTarget = 0;
 			centerSmooth = 0;
@@ -211,6 +231,7 @@ export function createShelfContentList(opts: ShelfContentListOptions = {}): Shel
 			rowAnimAt = nowFn();
 		},
 		setError(label) {
+			clearScreenTargets();
 			rows = [makePlaceholderRow(label, "error")];
 			centerTarget = 0;
 			centerSmooth = 0;
@@ -218,6 +239,7 @@ export function createShelfContentList(opts: ShelfContentListOptions = {}): Shel
 			rowAnimAt = nowFn();
 		},
 		close() {
+			clearScreenTargets();
 			openState = false;
 			requestToken++;
 			rows = [];
@@ -281,6 +303,23 @@ export function createShelfContentList(opts: ShelfContentListOptions = {}): Shel
 				pulse: inputs.pulse,
 				rowSettle: inputs.rowSettle,
 			});
+		},
+		setScreenTargets(targets) {
+			screenRows = (targets.rows ?? []).map(cloneScreenRow);
+			screenPanel = targets.panel ? cloneScreenPanel(targets.panel) : null;
+		},
+		clearScreenTargets() {
+			clearScreenTargets();
+		},
+		pickRowAtScreen(pointer) {
+			return pickShelfContentRowAtScreen(screenRows, pointer);
+		},
+		screenContainsPanel(pointer) {
+			return screenContainsShelfContentPanel(screenPanel, pointer);
+		},
+		hasScreenTargetAt(pointer) {
+			if (pickShelfContentRowAtScreen(screenRows, pointer)) return true;
+			return screenContainsShelfContentPanel(screenPanel, pointer);
 		},
 		getSnapshot() {
 			return {
@@ -441,6 +480,20 @@ function contentKindFromPlaylistId(playlistId: string): ShelfContentKind {
 
 function cloneRow(row: ShelfContentRow): ShelfContentRow {
 	return { ...row };
+}
+
+function cloneScreenRow(row: ShelfContentScreenRow): ShelfContentScreenRow {
+	return {
+		...row,
+		bounds: { ...row.bounds },
+	};
+}
+
+function cloneScreenPanel(panel: ShelfContentScreenPanel): ShelfContentScreenPanel {
+	return {
+		...panel,
+		bounds: { ...panel.bounds },
+	};
 }
 
 function makeHiddenLayout(rowIndex: number, delta: number, absD: number): ShelfContentRowLayout {

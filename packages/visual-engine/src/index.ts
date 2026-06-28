@@ -299,6 +299,7 @@ export type {
 	ShelfContentScreenPoint,
 	ShelfContentScreenRow,
 	ShelfContentScreenRowPick,
+	ShelfContentScreenTargets,
 	ShelfContentSnapshot,
 	ShelfContentSourceCard,
 } from "./shelf/shelf-content-list";

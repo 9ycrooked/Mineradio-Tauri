@@ -341,3 +341,173 @@ test("shelf content screen hit primitives export baseline default geometry and p
 	expect(SHELF_CONTENT_PANEL_SCREEN_HEIGHT).toBe(3.02);
 	expect(SHELF_CONTENT_PANEL_SCREEN_PAD).toBe(42);
 });
+
+test("ShelfContentList defaults to no screen targets", () => {
+	const list = createShelfContentList();
+
+	expect(list.pickRowAtScreen({ x: 120, y: 120 })).toBeNull();
+	expect(list.screenContainsPanel({ x: 120, y: 120 })).toBe(false);
+	expect(list.hasScreenTargetAt({ x: 120, y: 120 })).toBe(false);
+});
+
+test("ShelfContentList picks rows from stored screen targets using baseline row hit behavior", () => {
+	const list = createShelfContentList();
+	const low = { id: "low", name: "Low" };
+	const high = { id: "high", name: "High" };
+
+	list.setScreenTargets({
+		rows: [
+			{
+				row: low,
+				visible: true,
+				renderOrder: 10,
+				bounds: { minX: 100, minY: 100, maxX: 200, maxY: 160 },
+			},
+			{
+				row: high,
+				visible: true,
+				renderOrder: 20,
+				bounds: { minX: 110, minY: 110, maxX: 210, maxY: 170 },
+			},
+		],
+	});
+
+	expect(list.pickRowAtScreen({ x: 90, y: 100 })).toEqual({
+		row: high,
+		uv: { x: 0, y: 1 },
+		screenPick: true,
+	});
+	expect(list.hasScreenTargetAt({ x: 90, y: 100 })).toBe(true);
+});
+
+test("ShelfContentList checks stored panel targets after row targets", () => {
+	const list = createShelfContentList();
+	const row = { id: "row", name: "Row" };
+
+	list.setScreenTargets({
+		rows: [
+			{
+				row,
+				visible: true,
+				renderOrder: 1,
+				bounds: { minX: 100, minY: 100, maxX: 200, maxY: 160 },
+			},
+		],
+		panel: {
+			visible: true,
+			bounds: { minX: 300, minY: 200, maxX: 500, maxY: 520 },
+		},
+	});
+
+	expect(list.screenContainsPanel({ x: 258, y: 158 })).toBe(true);
+	expect(list.hasScreenTargetAt({ x: 258, y: 158 })).toBe(true);
+	expect(list.pickRowAtScreen({ x: 120, y: 120 })?.row).toBe(row);
+	expect(list.hasScreenTargetAt({ x: 120, y: 120 })).toBe(true);
+});
+
+test("ShelfContentList can clear stored screen targets", () => {
+	const list = createShelfContentList();
+
+	list.setScreenTargets({
+		rows: [
+			{
+				row: { id: "row", name: "Row" },
+				visible: true,
+				renderOrder: 1,
+				bounds: { minX: 100, minY: 100, maxX: 200, maxY: 160 },
+			},
+		],
+		panel: {
+			visible: true,
+			bounds: { minX: 300, minY: 200, maxX: 500, maxY: 520 },
+		},
+	});
+
+	list.clearScreenTargets();
+
+	expect(list.pickRowAtScreen({ x: 120, y: 120 })).toBeNull();
+	expect(list.screenContainsPanel({ x: 320, y: 240 })).toBe(false);
+	expect(list.hasScreenTargetAt({ x: 120, y: 120 })).toBe(false);
+});
+
+test("ShelfContentList screen hit methods can be used as callbacks", () => {
+	const list = createShelfContentList();
+	list.setScreenTargets({
+		rows: [
+			{
+				row: { id: "row", name: "Row" },
+				visible: true,
+				renderOrder: 1,
+				bounds: { minX: 100, minY: 100, maxX: 200, maxY: 160 },
+			},
+		],
+	});
+
+	const hasScreenTargetAt = list.hasScreenTargetAt;
+
+	expect(hasScreenTargetAt({ x: 120, y: 120 })).toBe(true);
+});
+
+test("ShelfContentList clears stale screen targets when content state changes", () => {
+	const list = createShelfContentList();
+	const setTargets = () => list.setScreenTargets({
+		rows: [
+			{
+				row: { id: "row", name: "Row" },
+				visible: true,
+				renderOrder: 1,
+				bounds: { minX: 100, minY: 100, maxX: 200, maxY: 160 },
+			},
+		],
+		panel: {
+			visible: true,
+			bounds: { minX: 300, minY: 200, maxX: 500, maxY: 520 },
+		},
+	});
+
+	setTargets();
+	list.open({ playlistId: "p1", title: "A" });
+	expect(list.hasScreenTargetAt({ x: 120, y: 120 })).toBe(false);
+
+	setTargets();
+	list.setRows(makeRows(2));
+	expect(list.hasScreenTargetAt({ x: 120, y: 120 })).toBe(false);
+
+	setTargets();
+	list.setLoading();
+	expect(list.hasScreenTargetAt({ x: 120, y: 120 })).toBe(false);
+
+	setTargets();
+	list.setError("歌单加载失败");
+	expect(list.hasScreenTargetAt({ x: 120, y: 120 })).toBe(false);
+
+	setTargets();
+	list.close();
+	expect(list.hasScreenTargetAt({ x: 120, y: 120 })).toBe(false);
+	expect(list.screenContainsPanel({ x: 320, y: 240 })).toBe(false);
+});
+
+test("ShelfContentList copies caller screen target arrays and bounds", () => {
+	const list = createShelfContentList();
+	const firstBounds = { minX: 100, minY: 100, maxX: 200, maxY: 160 };
+	const callerRows = [
+		{
+			row: { id: "first", name: "First" },
+			visible: true,
+			renderOrder: 1,
+			bounds: firstBounds,
+		},
+	];
+
+	list.setScreenTargets({ rows: callerRows });
+	callerRows.push({
+		row: { id: "pushed", name: "Pushed" },
+		visible: true,
+		renderOrder: 99,
+		bounds: { minX: 300, minY: 300, maxX: 360, maxY: 340 },
+	});
+	firstBounds.minX = 500;
+
+	expect(list.pickRowAtScreen({ x: 120, y: 120 })?.row.id).toBe("first");
+	expect(list.pickRowAtScreen({ x: 320, y: 320 })).toBeNull();
+});
