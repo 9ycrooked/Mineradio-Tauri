@@ -24,6 +24,7 @@ import {
 } from "../stores/shelf-store";
 import { useUiStore } from "../stores/ui-store";
 import { useUpdateStore } from "../stores/update-store";
+import { saveVisualFxToStorage, useVisualStore } from "../stores/visual-store";
 import {
 	closeDesktopLyricsWindow,
 	configureGlobalHotkeys,
@@ -52,6 +53,7 @@ import { TopRightControls } from "../components/shell/TopRightControls";
 import { UpdateHost } from "../components/shell/UpdateHost";
 import { EmptyHomeHost } from "../home/EmptyHomeHost";
 import { SplashHost, type SplashHostProps } from "../visual/SplashHost";
+import { VisualControlPanelHost } from "../visual/VisualControlPanelHost";
 import { VisualEngineHost } from "../visual/VisualEngineHost";
 import {
 	createPodcastRadioDetailOpener,
@@ -245,6 +247,12 @@ export function App({
 	const setShelfShowPodcasts = useShelfStore((s) => s.setShowPodcasts);
 	const setShelfMergeCollections = useShelfStore((s) => s.setMergeCollections);
 	const applyShelfSettings = useShelfStore((s) => s.applySettings);
+	const visualFx = useVisualStore((s) => s.fx);
+	const visualPreset = useVisualStore((s) => s.preset);
+	const visualIntensity = useVisualStore((s) => s.intensity);
+	const setVisualPreset = useVisualStore((s) => s.setPreset);
+	const setVisualNumberSetting = useVisualStore((s) => s.setNumberSetting);
+	const setVisualBooleanSetting = useVisualStore((s) => s.setBooleanSetting);
 	const consoleVisible = useUiStore((s) => s.consoleVisible);
 	const setConsole = useUiStore((s) => s.setConsole);
 	const miniQueueOpen = useUiStore((s) => s.miniQueueOpen);
@@ -780,6 +788,22 @@ export function App({
 		showToast(merge ? "我的歌单与收藏歌单已合并滚动" : "收藏歌单恢复滚到底切页");
 	}, [setShelfMergeCollections, showToast]);
 
+	const updateVisualPreset = useCallback((preset: number) => {
+		setVisualPreset(preset);
+		saveVisualFxToStorage();
+	}, [setVisualPreset]);
+
+	const updateVisualNumberSetting = useCallback((key: keyof typeof visualFx, value: number) => {
+		setVisualNumberSetting(key, value);
+		saveVisualFxToStorage();
+	}, [setVisualNumberSetting]);
+
+	const updateVisualBooleanSetting = useCallback((key: keyof typeof visualFx, value: boolean) => {
+		setVisualBooleanSetting(key, value);
+		saveVisualFxToStorage();
+		if (key === "wallpaperMode") showToast("壁纸模式开发中，暂不可用");
+	}, [setVisualBooleanSetting, showToast]);
+
 	const setPlaybackQuality = useCallback((quality: PlaybackQuality) => {
 		setPlaybackQualityState(quality);
 		savePlaybackQualityPreference(quality);
@@ -1200,7 +1224,8 @@ export function App({
 				currentTrack={currentTrack}
 				currentCoverUrl={currentTrack?.coverUrl}
 				sidecarBaseUrl={sidecarBaseUrl}
-				coverResolution={1.55}
+				coverResolution={visualFx.coverResolution}
+				fxState={visualFx}
 				shelfSettings={{
 					mode: shelfMode,
 					cameraMode: shelfCameraMode,
@@ -1244,6 +1269,14 @@ export function App({
 					});
 					void loader(payload);
 				}}
+			/>
+			<VisualControlPanelHost
+				preset={visualPreset}
+				intensity={visualIntensity}
+				settings={visualFx}
+				onPresetChange={updateVisualPreset}
+				onNumberSettingChange={updateVisualNumberSetting}
+				onBooleanSettingChange={updateVisualBooleanSetting}
 			/>
 			<EmptyHomeHost
 				onSearchFocus={focusSearch}

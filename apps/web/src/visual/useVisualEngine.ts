@@ -5,6 +5,7 @@ import {
 	createConnectorParticles,
 	createHomeVisual,
 	createDefaultFreeCameraState,
+	cloneFxState,
 	createRenderLoop,
 	createRenderer,
 	createShelfManagerWithThree,
@@ -75,6 +76,7 @@ export interface VisualEngineRefs {
 	lifecycleRef: RefObject<StageLyricsLifecycle | null>;
 	coverResolution: number;
 	fxDefaults?: Partial<FxState>;
+	fxRef?: RefObject<Partial<FxState> | undefined>;
 	onShelfModeChange?: (mode: "side") => void;
 }
 
@@ -109,6 +111,13 @@ function prefersReducedMotion(): boolean {
 	} catch {
 		return false;
 	}
+}
+
+function mergeFxState(target: FxState, source: Partial<FxState> | undefined): FxState {
+	if (!source) return target;
+	Object.assign(target, source);
+	if (source.mouseXy) target.mouseXy = { ...target.mouseXy, ...source.mouseXy };
+	return target;
 }
 
 async function initAudioSource(el: HTMLAudioElement | null): Promise<AudioFrameSource> {
@@ -385,10 +394,11 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 				},
 			});
 			const freeCamera = createDefaultFreeCameraState();
+			const runtimeFx = mergeFxState(mergeFxState(cloneFxState(), refs.fxDefaults), refs.fxRef?.current);
 			const homeVisual = await createHomeVisual({
 				scene: renderer.scene,
 				coverResolution: refs.coverResolution,
-				fx: refs.fxDefaults as FxState | undefined,
+				fx: runtimeFx,
 			});
 			let homeVisualPreviousPreset: number | null = null;
 			let homeVisualPreviewActive = false;
@@ -468,6 +478,7 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 				audioEngine.update(ctx.dt);
 			});
 			const offHome = renderLoop.registerStep(RenderStepSlot.HomeVisual, (ctx) => {
+				mergeFxState(homeVisual.getFx(), refs.fxRef?.current);
 				if (refs.coverUrlVersionRef && syncedCoverUrlVersion !== refs.coverUrlVersionRef.current) {
 					syncedCoverUrlVersion = refs.coverUrlVersionRef.current;
 					homeVisual.setCoverUrl(refs.coverUrlRef?.current ?? "");
@@ -477,11 +488,11 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 				const preset = resolveHomeVisualPreset(
 					homeActive,
 					homeVisual.getPreset(),
-					refs.fxDefaults?.preset ?? 0,
+					homeVisual.getFx().preset ?? refs.fxDefaults?.preset ?? 0,
 					homeVisualPreviousPreset,
 					{
 						playbackActive: refs.isPlayingRef.current,
-						playbackPreset: refs.fxDefaults?.preset ?? 0,
+						playbackPreset: homeVisual.getFx().preset ?? refs.fxDefaults?.preset ?? 0,
 					},
 				);
 				if (preset.changed) {

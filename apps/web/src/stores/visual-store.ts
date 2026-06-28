@@ -3,13 +3,65 @@ import {
 	PersistedVisualState,
 	PersistedVisualStateSchema,
 } from "@mineradio/shared";
+import { cloneFxState, type FxState } from "@mineradio/visual-engine";
+
+export const VISUAL_SETTINGS_STORE_KEY = "mineradio-tauri-visual-settings-v1";
+
+type StorageLike = Pick<Storage, "getItem" | "setItem">;
+
+function clamp(value: unknown, fallback: number, min: number, max: number): number {
+	const n = typeof value === "number" ? value : Number(value);
+	if (!Number.isFinite(n)) return fallback;
+	return Math.max(min, Math.min(max, n));
+}
+
+function booleanValue(value: unknown, fallback: boolean): boolean {
+	if (typeof value === "boolean") return value;
+	return fallback;
+}
+
+export function normalizeVisualFxState(input?: Partial<FxState> | null): FxState {
+	const fx = cloneFxState();
+	if (!input) return fx;
+	return {
+		...fx,
+		...input,
+		preset: Math.round(clamp(input.preset, fx.preset, 0, 6)),
+		intensity: clamp(input.intensity, fx.intensity, 0.2, 1.6),
+		cinemaShake: clamp(input.cinemaShake, fx.cinemaShake, 0, 1.8),
+		depth: clamp(input.depth, fx.depth, 0.2, 1.8),
+		coverResolution: clamp(input.coverResolution, fx.coverResolution, 0.75, 1.55),
+		lyricGlowStrength: clamp(input.lyricGlowStrength, fx.lyricGlowStrength, 0, 0.85),
+		backgroundOpacity: clamp(input.backgroundOpacity, fx.backgroundOpacity, 0, 1),
+		controlGlassChromaticOffset: clamp(input.controlGlassChromaticOffset, fx.controlGlassChromaticOffset, 0, 140),
+		desktopLyrics: booleanValue(input.desktopLyrics, fx.desktopLyrics),
+		desktopLyricsClickThrough: booleanValue(input.desktopLyricsClickThrough, fx.desktopLyricsClickThrough),
+		desktopLyricsCinema: booleanValue(input.desktopLyricsCinema, fx.desktopLyricsCinema),
+		desktopLyricsHighlight: booleanValue(input.desktopLyricsHighlight, fx.desktopLyricsHighlight),
+		wallpaperMode: false,
+		floatLayer: booleanValue(input.floatLayer, fx.floatLayer),
+		cinema: booleanValue(input.cinema, fx.cinema),
+		edge: booleanValue(input.edge, fx.edge),
+		bloom: booleanValue(input.bloom, fx.bloom),
+		lyricGlow: booleanValue(input.lyricGlow, fx.lyricGlow),
+		lyricGlowBeat: booleanValue(input.lyricGlowBeat, fx.lyricGlowBeat),
+		lyricGlowParticles: booleanValue(input.lyricGlowParticles, fx.lyricGlowParticles),
+		lyricCameraLock: booleanValue(input.lyricCameraLock, fx.lyricCameraLock),
+		liveBackgroundKeep: booleanValue(input.liveBackgroundKeep, fx.liveBackgroundKeep),
+		mouseXy: { ...fx.mouseXy, ...(input.mouseXy ?? {}) },
+	};
+}
 
 export interface VisualState {
-	preset: string;
+	fx: FxState;
+	preset: number;
 	intensity: number;
 	custom: Record<string, unknown>;
-	setPreset: (preset: string) => void;
+	setPreset: (preset: number) => void;
 	setIntensity: (intensity: number) => void;
+	setNumberSetting: (key: keyof FxState, value: number) => void;
+	setBooleanSetting: (key: keyof FxState, value: boolean) => void;
+	setFxPatch: (patch: Partial<FxState>) => void;
 	setCustom: (key: string, value: unknown) => void;
 	serialize: () => PersistedVisualState;
 }
@@ -25,17 +77,66 @@ export function loadFromStorage(json: string): PersistedVisualState | null {
 	return result.success ? result.data : null;
 }
 
+function storageOrNull(storage?: StorageLike): StorageLike | null {
+	if (storage) return storage;
+	if (typeof localStorage === "undefined") return null;
+	return localStorage;
+}
+
+export function loadVisualFxFromStorage(storage?: StorageLike): FxState | null {
+	const target = storageOrNull(storage);
+	if (!target) return null;
+	try {
+		const raw = target.getItem(VISUAL_SETTINGS_STORE_KEY);
+		if (!raw) return null;
+		const parsed = JSON.parse(raw) as Partial<FxState>;
+		return normalizeVisualFxState(parsed);
+	} catch {
+		return null;
+	}
+}
+
+export function saveVisualFxToStorage(storage?: StorageLike): void {
+	const target = storageOrNull(storage);
+	if (!target) return;
+	try {
+		target.setItem(VISUAL_SETTINGS_STORE_KEY, JSON.stringify(useVisualStore.getState().fx));
+	} catch {
+	}
+}
+
+const initialFx = normalizeVisualFxState(loadVisualFxFromStorage());
+
 export const useVisualStore = create<VisualState>()((set, get) => ({
-	preset: "default",
-	intensity: 0.5,
+	fx: initialFx,
+	preset: initialFx.preset,
+	intensity: initialFx.intensity,
 	custom: {},
-	setPreset: (preset) => set({ preset }),
-	setIntensity: (intensity) => set({ intensity }),
+	setPreset: (preset) => set((state) => {
+		const fx = normalizeVisualFxState({ ...state.fx, preset });
+		return { fx, preset: fx.preset, intensity: fx.intensity };
+	}),
+	setIntensity: (intensity) => set((state) => {
+		const fx = normalizeVisualFxState({ ...state.fx, intensity });
+		return { fx, preset: fx.preset, intensity: fx.intensity };
+	}),
+	setNumberSetting: (key, value) => set((state) => {
+		const fx = normalizeVisualFxState({ ...state.fx, [key]: value });
+		return { fx, preset: fx.preset, intensity: fx.intensity };
+	}),
+	setBooleanSetting: (key, value) => set((state) => {
+		const fx = normalizeVisualFxState({ ...state.fx, [key]: value });
+		return { fx, preset: fx.preset, intensity: fx.intensity };
+	}),
+	setFxPatch: (patch) => set((state) => {
+		const fx = normalizeVisualFxState({ ...state.fx, ...patch });
+		return { fx, preset: fx.preset, intensity: fx.intensity };
+	}),
 	setCustom: (key, value) =>
 		set((s) => ({ custom: { ...s.custom, [key]: value } })),
 	serialize: () => ({
 		version: 1,
-		preset: get().preset,
+		preset: String(get().preset),
 		intensity: get().intensity,
 		custom: get().custom,
 		updatedAt: Math.floor(Date.now() / 1000),

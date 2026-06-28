@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { loadFromStorage, useVisualStore } from "./visual-store";
+import { loadFromStorage, loadVisualFxFromStorage, useVisualStore, VISUAL_SETTINGS_STORE_KEY } from "./visual-store";
 
 test("loadFromStorage rejects a malformed payload", () => {
 	expect(loadFromStorage("{not json")).toBeNull();
@@ -20,12 +20,35 @@ test("loadFromStorage accepts a valid PersistedVisualState", () => {
 });
 
 test("visual store actions update state and serialize", () => {
-	useVisualStore.setState({ preset: "default", intensity: 0.5, custom: {} });
-	useVisualStore.getState().setPreset("nebula");
+	useVisualStore.setState({ fx: { ...useVisualStore.getState().fx, preset: 0, intensity: 0.5 }, preset: 0, intensity: 0.5, custom: {} });
+	useVisualStore.getState().setPreset(4);
 	useVisualStore.getState().setIntensity(0.3);
+	useVisualStore.getState().setNumberSetting("depth", 1.4);
+	useVisualStore.getState().setBooleanSetting("cinema", false);
 	useVisualStore.getState().setCustom("hue", 200);
 	const serialized = useVisualStore.getState().serialize();
-	expect(serialized.preset).toBe("nebula");
+	expect(serialized.preset).toBe("4");
 	expect(serialized.intensity).toBe(0.3);
 	expect(serialized.custom.hue).toBe(200);
+	expect(useVisualStore.getState().fx.depth).toBe(1.4);
+	expect(useVisualStore.getState().fx.cinema).toBe(false);
+});
+
+test("loadVisualFxFromStorage accepts baseline numeric fx state and keeps wallpaper mode disabled", () => {
+	const storage = new Map<string, string>();
+	const fakeStorage = {
+		getItem: (key: string) => storage.get(key) ?? null,
+		setItem: (key: string, value: string) => { storage.set(key, value); },
+	};
+	fakeStorage.setItem(VISUAL_SETTINGS_STORE_KEY, JSON.stringify({
+		preset: 6,
+		intensity: 1.2,
+		wallpaperMode: true,
+		cinema: false,
+	}));
+	const fx = loadVisualFxFromStorage(fakeStorage);
+	expect(fx?.preset).toBe(6);
+	expect(fx?.intensity).toBe(1.2);
+	expect(fx?.cinema).toBe(false);
+	expect(fx?.wallpaperMode).toBe(false);
 });

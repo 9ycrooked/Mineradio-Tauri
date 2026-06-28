@@ -30,6 +30,7 @@ export interface VisualEngineHostProps {
 	sidecarBaseUrl?: string | null;
 	coverResolution?: number;
 	fxDefaults?: Partial<FxState>;
+	fxState?: Partial<FxState>;
 	shelfSettings?: Pick<ShelfSettings, "mode" | "cameraMode" | "presence" | "showPodcasts" | "mergeCollections"> | null;
 	splashActive?: boolean;
 	homeActive?: boolean;
@@ -143,12 +144,14 @@ export function VisualEngineHost(props: VisualEngineHostProps): ReactElement {
 	const onShelfOpenDetailContentRef = useRef<((payload: ShelfOpenDetailContentPayload, writer: ShelfDetailContentListController) => void) | undefined>(props.onShelfOpenDetailContent);
 	const onShelfPaneChangeRef = useRef<((pane: ShelfPane) => void) | undefined>(undefined);
 	const lifecycleRef = useRef<StageLyricsLifecycle | null>(null);
+	const fxStateRef = useRef<Partial<FxState> | undefined>(props.fxState);
 
 	positionRef.current = props.positionMs;
 	isPlayingRef.current = props.isPlaying;
 	splashActiveRef.current = props.splashActive ?? false;
 	homeActiveRef.current = props.homeActive ?? false;
 	secondaryLeftDisplaySeamGuardRef.current = props.secondaryLeftDisplaySeamGuardActive ?? false;
+	fxStateRef.current = props.fxState;
 	const visualShelfSettings = resolveVisualShelfSettings(props.fxDefaults, props.shelfSettings);
 	syncRuntimeShelfModeOverride(
 		previousDefaultShelfModeRef,
@@ -248,6 +251,7 @@ export function VisualEngineHost(props: VisualEngineHostProps): ReactElement {
 		lifecycleRef,
 		coverResolution: props.coverResolution ?? 1.55,
 		fxDefaults: props.fxDefaults,
+		fxRef: fxStateRef,
 		onShelfModeChange: handleShelfModeChange,
 	});
 
