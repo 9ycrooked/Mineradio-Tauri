@@ -180,6 +180,24 @@ test("HomeVisual.setCoverUrl prepares cover canvas with the same baseline coverR
 	expect(image.height).toBe(384);
 });
 
+test("HomeVisual.update advances cover depth uniforms after edge texture generation", async () => {
+	const scene = makeFakeScene();
+	const edgeCanvas = { width: 256, height: 256, label: "edge" };
+	const hv = await createHomeVisual({
+		scene: scene as never,
+		threeFactory: makeFakeThree(),
+		loadCoverImage: async (url) => ({ width: 128, height: 128, src: url }),
+		buildCoverEdgeDepth: () => edgeCanvas,
+	});
+	hv.setCoverUrl("https://img.example/a.jpg");
+	await hv.getCoverController().whenIdle();
+	expect(hv.getField().materialUniforms.uEdgeTex.value.image).toBe(edgeCanvas);
+	expect(hv.getField().materialUniforms.uHasDepth.value).toBe(0);
+	hv.update(makeFrameCtx({}, { uTime: { value: 0.25 } }) as unknown as FrameContext);
+	expect(hv.getField().materialUniforms.uHasDepth.value as number).toBeGreaterThan(0);
+	expect(hv.getField().materialUniforms.uAiBoost.value as number).toBeGreaterThan(0);
+});
+
 test("preset 6 (skull) suppresses points visibility; non-skull leaves points visible", async () => {
 	const scene = makeFakeScene();
 	const hv = await createHomeVisual({ scene: scene as never, threeFactory: makeFakeThree() });

@@ -13,6 +13,7 @@ import {
 import {
 	createHomeCoverTextureController,
 	type HomeCoverCanvasFactory,
+	type HomeCoverImage,
 	type HomeCoverLoader,
 	type HomeCoverTextureController,
 } from "./cover-texture";
@@ -24,6 +25,7 @@ export interface HomeVisualOptions {
 	fx?: FxState;
 	loadCoverImage?: HomeCoverLoader;
 	createCoverCanvas?: HomeCoverCanvasFactory;
+	buildCoverEdgeDepth?: (image: HomeCoverImage) => HomeCoverImage | null;
 }
 
 export interface HomeVisual {
@@ -49,6 +51,7 @@ export async function createHomeVisual(opts: HomeVisualOptions): Promise<HomeVis
 		loadImage: opts.loadCoverImage,
 		coverResolution: fieldOpts.coverResolution,
 		createCanvas: opts.createCoverCanvas,
+		buildEdgeDepth: opts.buildCoverEdgeDepth,
 	});
 	field.applyFxState(fx);
 	field.bloomPoints.visible = !!(fx.bloom && fx.bloomStrength > 0.01) && fx.preset !== SKULL_PRESET_INDEX;
@@ -73,6 +76,7 @@ export async function createHomeVisual(opts: HomeVisualOptions): Promise<HomeVis
 			alphaUniform.value += (target - alphaUniform.value) * ease;
 		}
 		coverController.advanceColorMix(ctx.dt);
+		coverController.advanceDepth(ctx.dt);
 	}
 
 	return {

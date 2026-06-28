@@ -17,6 +17,7 @@ function makeUniforms() {
 	return {
 		uCoverTex: { value: makeTexture("cover") },
 		uPrevCoverTex: { value: makeTexture("prev") },
+		uEdgeTex: { value: makeTexture("edge") },
 		uColorMixT: { value: 1 },
 		uHasCover: { value: 0 },
 		uLoading: { value: 0 },
@@ -110,6 +111,30 @@ test("advanceColorMix moves uColorMixT toward 1 over the baseline color mix dura
 	expect(uniforms.uColorMixT.value).toBeCloseTo(0.25, 5);
 	ctl.advanceColorMix(0.75);
 	expect(uniforms.uColorMixT.value).toBe(1);
+});
+
+test("setCoverUrl(url) builds the baseline edge/depth texture and advances depth uniforms", async () => {
+	const uniforms = makeUniforms();
+	const edgeCanvas = { width: 256, height: 256, label: "edge-depth" };
+	const ctl = createHomeCoverTextureController({
+		uniforms: uniforms as never,
+		loadImage: async (url) => ({ width: 64, height: 64, src: url }),
+		buildEdgeDepth: (image) => {
+			expect((image as { src: string }).src).toBe("https://img.example/a.jpg");
+			return edgeCanvas as never;
+		},
+	});
+	ctl.setCoverUrl("https://img.example/a.jpg");
+	await ctl.whenIdle();
+	expect(uniforms.uEdgeTex.value.image).toBe(edgeCanvas);
+	expect(uniforms.uEdgeTex.value.needsUpdate).toBe(true);
+	expect(uniforms.uHasDepth.value).toBe(0);
+	ctl.advanceDepth(0.09);
+	expect(uniforms.uHasDepth.value).toBeCloseTo(0.5, 5);
+	expect(uniforms.uAiBoost.value).toBeCloseTo(0.275, 5);
+	ctl.advanceDepth(0.09);
+	expect(uniforms.uHasDepth.value).toBe(1);
+	expect(uniforms.uAiBoost.value).toBe(0.55);
 });
 
 test("coverTextureSizeForResolution preserves baseline 256/384/512 thresholds", () => {

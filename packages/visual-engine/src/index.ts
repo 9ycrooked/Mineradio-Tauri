@@ -151,6 +151,17 @@ export type {
 	HomeCoverTextureUniforms,
 } from "./home-visual/cover-texture";
 export {
+	buildEdgeAndDepthCanvas,
+	createCoverDepthTween,
+	visualEase,
+} from "./home-visual/cover-depth";
+export type {
+	CoverDepthCanvas,
+	CoverDepthCanvasFactory,
+	CoverDepthTween,
+	CoverDepthUniforms,
+} from "./home-visual/cover-depth";
+export {
 	HOME_VISUAL_VERTEX_SHADER,
 	HOME_VISUAL_FRAGMENT_SHADER,
 	HOME_VISUAL_BLOOM_FRAGMENT_SHADER,

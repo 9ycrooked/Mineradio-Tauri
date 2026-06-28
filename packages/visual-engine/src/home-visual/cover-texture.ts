@@ -1,9 +1,17 @@
 import type * as THREE from "three";
 import { normalizeCoverResolution } from "./home-particle-field";
+import {
+	buildEdgeAndDepthCanvas,
+	createCoverDepthTween,
+	type CoverDepthCanvas,
+	type CoverDepthCanvasFactory,
+	type CoverDepthTween,
+} from "./cover-depth";
 
 export interface HomeCoverTextureUniforms {
 	uCoverTex: { value: THREE.Texture };
 	uPrevCoverTex: { value: THREE.Texture };
+	uEdgeTex?: { value: THREE.Texture };
 	uColorMixT: { value: number };
 	uHasCover: { value: number };
 	uLoading?: { value: number };
@@ -22,14 +30,17 @@ export type HomeCoverCanvasFactory = (width: number, height: number) => CanvasIm
 export interface HomeCoverTextureControllerOptions {
 	uniforms: HomeCoverTextureUniforms;
 	loadImage?: HomeCoverLoader;
+	buildEdgeDepth?: (image: HomeCoverImage) => HomeCoverImage | null;
 	colorMixDurationMs?: number;
 	coverResolution?: number;
 	createCanvas?: HomeCoverCanvasFactory;
+	createDepthCanvas?: CoverDepthCanvasFactory;
 }
 
 export interface HomeCoverTextureController {
 	setCoverUrl(url: string | null | undefined): void;
 	advanceColorMix(dtSeconds: number): void;
+	advanceDepth(dtSeconds: number): void;
 	getCurrentUrl(): string;
 	whenIdle(): Promise<void>;
 }
@@ -101,6 +112,16 @@ function resetDepthUniforms(uniforms: HomeCoverTextureUniforms): void {
 	if (uniforms.uAiBoost) uniforms.uAiBoost.value = 0;
 }
 
+function buildDepthImage(
+	image: HomeCoverImage,
+	opts: HomeCoverTextureControllerOptions,
+): HomeCoverImage | null {
+	if (opts.buildEdgeDepth) return opts.buildEdgeDepth(image);
+	return buildEdgeAndDepthCanvas(image as CanvasImageSource, {
+		createCanvas: opts.createDepthCanvas,
+	}) as CoverDepthCanvas | null;
+}
+
 export function createHomeCoverTextureController(
 	opts: HomeCoverTextureControllerOptions,
 ): HomeCoverTextureController {
@@ -108,6 +129,9 @@ export function createHomeCoverTextureController(
 	const loadImage = opts.loadImage ?? defaultLoadImage;
 	const colorMixDurationMs = Math.max(1, opts.colorMixDurationMs ?? 1400);
 	const coverResolution = opts.coverResolution ?? 1.55;
+	const depthTween: CoverDepthTween | null = uniforms.uHasDepth && uniforms.uAiBoost
+		? createCoverDepthTween({ uHasDepth: uniforms.uHasDepth, uAiBoost: uniforms.uAiBoost })
+		: null;
 	let currentUrl = "";
 	let token = 0;
 	let pending: Promise<void> | null = null;
@@ -118,6 +142,7 @@ export function createHomeCoverTextureController(
 		uniforms.uHasCover.value = 0;
 		uniforms.uColorMixT.value = 1;
 		if (uniforms.uLoading) uniforms.uLoading.value = 0;
+		depthTween?.setTarget(0, 0, 1);
 		resetDepthUniforms(uniforms);
 		pending = null;
 	}
@@ -136,19 +161,27 @@ export function createHomeCoverTextureController(
 			.then((image) => {
 				if (runToken !== token) return;
 				const preparedImage = prepareSquareCoverCanvas(image, { coverResolution, createCanvas: opts.createCanvas });
+				const edgeImage = uniforms.uEdgeTex ? buildDepthImage(preparedImage, opts) : null;
 				if (uniforms.uHasCover.value > 0.5 && uniforms.uCoverTex.value.image) {
 					markTextureImage(uniforms.uPrevCoverTex.value, uniforms.uCoverTex.value.image as HomeCoverImage);
 				}
 				markTextureImage(uniforms.uCoverTex.value, preparedImage);
+				if (edgeImage && uniforms.uEdgeTex) {
+					markTextureImage(uniforms.uEdgeTex.value, edgeImage);
+					depthTween?.setTarget(1, 0.55, 180);
+				} else {
+					depthTween?.setTarget(0, 0, 1);
+					resetDepthUniforms(uniforms);
+				}
 				uniforms.uHasCover.value = 1;
 				uniforms.uColorMixT.value = 0;
 				if (uniforms.uLoading) uniforms.uLoading.value = 0;
-				resetDepthUniforms(uniforms);
 			})
 			.catch(() => {
 				if (runToken !== token) return;
 				uniforms.uHasCover.value = 0;
 				if (uniforms.uLoading) uniforms.uLoading.value = 0;
+				depthTween?.setTarget(0, 0, 1);
 				resetDepthUniforms(uniforms);
 			});
 	}
@@ -162,6 +195,9 @@ export function createHomeCoverTextureController(
 	return {
 		setCoverUrl,
 		advanceColorMix,
+		advanceDepth(dtSeconds) {
+			depthTween?.advance(dtSeconds);
+		},
 		getCurrentUrl() {
 			return currentUrl;
 		},
