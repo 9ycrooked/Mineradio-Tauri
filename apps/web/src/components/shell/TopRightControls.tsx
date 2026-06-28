@@ -2,15 +2,18 @@ import { type ReactElement } from "react";
 
 export interface TopRightControlsProps {
 	onHome?: () => void;
+	onLogin?: () => void;
+	onHideCapsule?: () => void;
 }
 
-export function TopRightControls({ onHome }: TopRightControlsProps): ReactElement {
+export function TopRightControls({ onHome, onLogin, onHideCapsule }: TopRightControlsProps): ReactElement {
 	return (
 		<div id="top-right">
 			<button
 				id="user-capsule-hide-btn"
 				className="user-capsule-hide-btn"
 				type="button"
+				onClick={onHideCapsule}
 				title="自动隐藏账号胶囊"
 				aria-label="自动隐藏账号胶囊"
 			>
@@ -30,7 +33,7 @@ export function TopRightControls({ onHome }: TopRightControlsProps): ReactElemen
 					<path d="M9.5 20v-5h5v5" />
 				</svg>
 			</button>
-			<button id="user-btn" className="icon-btn logged-out" type="button" title="登录账号" aria-label="登录账号">
+			<button id="user-btn" className="icon-btn logged-out" type="button" onClick={onLogin} title="登录账号" aria-label="登录账号">
 				<span className="login-word">登录</span>
 			</button>
 		</div>

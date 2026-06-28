@@ -120,6 +120,23 @@ test("search parses a success envelope of Track[]", async () => {
 	});
 });
 
+test("searchAll uses the cross-source search endpoint", async () => {
+	const fake = (async (input: RequestInfo | URL, init?: RequestInit) => {
+		const url = typeof input === "string" ? input : input.toString();
+		expect(url).toContain("/search");
+		expect(url).toContain("keyword=hello");
+		expect(url).toContain("limit=30");
+		expect(url).not.toContain("/providers/");
+		void init;
+		return jsonResponse({ ok: true, data: [SAMPLE_TRACK] });
+	}) as typeof fetch;
+	await withFetch(fake, async () => {
+		const client = new SidecarClient(BASE);
+		const tracks = await client.searchAll("hello", 30);
+		expect(tracks[0].id).toBe("t1");
+	});
+});
+
 test("search throws SidecarClientError on ok:false", async () => {
 	const fake = (async () =>
 		jsonResponse({
@@ -157,6 +174,25 @@ test("songUrl POSTs the Track body and parses the SongUrlResult envelope", async
 		expect(result.url).toBe("https://proxied/a.mp3");
 		expect(result.proxied).toBe(true);
 		expect((receivedBody as { id: string }).id).toBe("t1");
+	});
+});
+
+test("resolveSongUrl POSTs to the cross-source song-url endpoint", async () => {
+	const fake = (async (input: RequestInfo | URL, init?: RequestInit) => {
+		const url = typeof input === "string" ? input : input.toString();
+		expect(url).toContain("/song-url");
+		expect(url).not.toContain("/providers/");
+		expect(init?.method).toBe("POST");
+		return jsonResponse({
+			ok: true,
+			data: { url: "https://media.example/a.mp3", proxied: false },
+		});
+	}) as typeof fetch;
+	await withFetch(fake, async () => {
+		const client = new SidecarClient(BASE);
+		const result = await client.resolveSongUrl(SAMPLE_TRACK);
+		expect(result.proxied).toBe(false);
+		expect(client.audioProxyUrl(result.url)).toBe(`${BASE}/audio-proxy?url=https%3A%2F%2Fmedia.example%2Fa.mp3`);
 	});
 });
 

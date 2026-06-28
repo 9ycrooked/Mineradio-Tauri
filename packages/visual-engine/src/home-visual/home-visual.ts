@@ -49,6 +49,13 @@ export async function createHomeVisual(opts: HomeVisualOptions): Promise<HomeVis
 
 		const tU = field.materialUniforms.uTime as { value: unknown } | undefined;
 		if (tU && typeof ctx.uniforms.uTime.value === "number") tU.value = ctx.uniforms.uTime.value;
+		const alphaUniform = field.materialUniforms.uAlpha as { value: unknown } | undefined;
+		if (alphaUniform && typeof alphaUniform.value === "number") {
+			const target = 0.96;
+			const dt = Number.isFinite(ctx.dt) ? Math.max(0, ctx.dt) : 0;
+			const ease = Math.min(1, dt * 4.8);
+			alphaUniform.value += (target - alphaUniform.value) * ease;
+		}
 	}
 
 	return {

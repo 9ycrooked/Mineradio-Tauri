@@ -164,6 +164,16 @@ export class SidecarClient {
 		);
 	}
 
+	async searchAll(keyword: string, limit: number, provider?: ProviderId): Promise<Track[]> {
+		const params = new URLSearchParams({ keyword, limit: String(limit) });
+		if (provider) params.set("provider", provider);
+		return this.request(
+			"GET",
+			`/search?${params.toString()}`,
+			TrackArraySchema,
+		);
+	}
+
 	async songUrl(track: Track): Promise<SongUrlResult> {
 		return this.request(
 			"POST",
@@ -171,6 +181,20 @@ export class SidecarClient {
 			SongUrlResultSchema,
 			track,
 		);
+	}
+
+	async resolveSongUrl(track: Track): Promise<SongUrlResult> {
+		return this.request(
+			"POST",
+			"/song-url",
+			SongUrlResultSchema,
+			track,
+		);
+	}
+
+	audioProxyUrl(url: string): string {
+		const params = new URLSearchParams({ url });
+		return `${this.baseUrl}/audio-proxy?${params.toString()}`;
 	}
 
 	async lyric(track: Track): Promise<LyricPayload> {

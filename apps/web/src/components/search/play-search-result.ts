@@ -3,9 +3,11 @@ import { usePlaybackStore } from "../../stores/playback-store";
 
 export function playSearchResult(track: Track): void {
 	const store = usePlaybackStore.getState();
-	store.enqueue(track);
-	const queue = usePlaybackStore.getState().queue;
-	const index = queue.findIndex(
+	const sameTrack = (t: Track) => t.provider === track.provider && t.id === track.id;
+	const queue = store.queue.filter((t) => !sameTrack(t));
+	store.setQueue([track, ...queue]);
+	const nextQueue = usePlaybackStore.getState().queue;
+	const index = nextQueue.findIndex(
 		(t) => t.provider === track.provider && t.id === track.id,
 	);
 	if (index >= 0) {

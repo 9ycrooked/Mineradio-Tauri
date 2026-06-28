@@ -5,14 +5,28 @@ import {
 	injectControlGlassStyle,
 	type ControlConsoleMotion,
 } from "@mineradio/visual-engine";
+import type { PlaybackMode } from "../stores/playback-store";
 
 export interface PlayerConsoleHostProps {
 	visible?: boolean;
 	onReveal?: () => void;
+	onTogglePlay?: () => void;
+	onPrevious?: () => void;
+	onNext?: () => void;
+	onModeChange?: (mode: PlaybackMode) => void;
+	onQueue?: () => void;
+	onLyrics?: () => void;
+	onNotice?: (message: string) => void;
 	onMinimize?: () => void;
 	onToggleMaximize?: () => void;
 	onToggleFullscreen?: () => void;
 	onClose?: () => void;
+	mode?: PlaybackMode;
+	isPlaying?: boolean;
+	currentTitle?: string;
+	currentArtist?: string;
+	positionMs?: number;
+	durationMs?: number | null;
 	deps?: {
 		controlsHovering?: () => boolean;
 		miniQueueOpen?: () => boolean;
@@ -40,6 +54,20 @@ export function PlayerConsoleHost(props: PlayerConsoleHostProps): ReactElement {
 	onToggleFullscreenRef.current = props.onToggleFullscreen;
 	const onCloseRef = useRef(props.onClose);
 	onCloseRef.current = props.onClose;
+	const onTogglePlayRef = useRef(props.onTogglePlay);
+	onTogglePlayRef.current = props.onTogglePlay;
+	const onPreviousRef = useRef(props.onPrevious);
+	onPreviousRef.current = props.onPrevious;
+	const onNextRef = useRef(props.onNext);
+	onNextRef.current = props.onNext;
+	const onModeChangeRef = useRef(props.onModeChange);
+	onModeChangeRef.current = props.onModeChange;
+	const onQueueRef = useRef(props.onQueue);
+	onQueueRef.current = props.onQueue;
+	const onLyricsRef = useRef(props.onLyrics);
+	onLyricsRef.current = props.onLyrics;
+	const onNoticeRef = useRef(props.onNotice);
+	onNoticeRef.current = props.onNotice;
 	const depsRef = useRef(props.deps);
 	depsRef.current = props.deps;
 
@@ -139,8 +167,12 @@ export function PlayerConsoleHost(props: PlayerConsoleHostProps): ReactElement {
 	}, [props.visible]);
 
 	const cyclePlayModeStub = useCallback(() => {
-		motionRef.current?.toggleModeButton("shuffle");
-	}, []);
+		const order: PlaybackMode[] = ["queue", "loop", "single", "shuffle"];
+		const current = props.mode ?? "queue";
+		const next = order[(order.indexOf(current) + 1) % order.length] ?? "queue";
+		onModeChangeRef.current?.(next);
+		motionRef.current?.toggleModeButton(next === "loop" ? "repeat" : next);
+	}, [props.mode]);
 
 	const toggleFullscreenStub = useCallback(() => {
 		onToggleFullscreenRef.current?.();
@@ -154,6 +186,33 @@ export function PlayerConsoleHost(props: PlayerConsoleHostProps): ReactElement {
 	const closeStub = useCallback(() => {
 		onCloseRef.current?.();
 	}, []);
+	const togglePlayStub = useCallback(() => {
+		onTogglePlayRef.current?.();
+	}, []);
+	const previousStub = useCallback(() => {
+		onPreviousRef.current?.();
+	}, []);
+	const nextStub = useCallback(() => {
+		onNextRef.current?.();
+	}, []);
+	const queueStub = useCallback(() => {
+		onQueueRef.current?.();
+	}, []);
+	const lyricsStub = useCallback(() => {
+		onLyricsRef.current?.();
+	}, []);
+	const noticeStub = useCallback((message: string) => {
+		onNoticeRef.current?.(message);
+	}, []);
+
+	const positionMs = props.positionMs ?? 0;
+	const durationMs = props.durationMs ?? 0;
+	const formatTime = (ms: number): string => {
+		const total = Math.max(0, Math.floor(ms / 1000));
+		const m = Math.floor(total / 60);
+		const s = total % 60;
+		return `${m}:${s.toString().padStart(2, "0")}`;
+	};
 
 	return (
 		<div id="bottom-bar" className={props.visible ? "visible" : "soft-hidden"} ref={barRef}>
@@ -165,36 +224,36 @@ export function PlayerConsoleHost(props: PlayerConsoleHostProps): ReactElement {
 					<div className="control-track">
 						<div id="control-cover" className="control-cover cover-empty" aria-hidden="true" />
 						<div className="control-meta">
-							<div id="control-title" className="control-title" />
-							<div id="control-artist" className="control-artist" />
+							<div id="control-title" className="control-title">{props.currentTitle ?? "Mineradio"}</div>
+							<div id="control-artist" className="control-artist">{props.currentArtist ?? "等待播放"}</div>
 						</div>
 					</div>
-					<button id="heart-btn" ref={registerNormal("heart-btn")} className="ctrl-btn" type="button" title="红心喜欢" aria-label="红心喜欢">
-						<svg viewBox="0 0 24 24" aria-hidden="true" width="21" height="21" />
+					<button id="heart-btn" ref={registerNormal("heart-btn")} className="ctrl-btn" type="button" title="红心喜欢" aria-label="红心喜欢" onClick={() => noticeStub("红心喜欢需要账号登录后同步")}>
+						<svg viewBox="0 0 24 24" aria-hidden="true" width="21" height="21" fill="none" stroke="currentColor" strokeWidth={2}><path d="M20.8 4.6c-1.7-1.7-4.5-1.7-6.2 0L12 7.2 9.4 4.6c-1.7-1.7-4.5-1.7-6.2 0s-1.7 4.5 0 6.2L12 19.6l8.8-8.8c1.7-1.7 1.7-4.5 0-6.2Z" /></svg>
 					</button>
-					<button id="collect-btn" ref={registerNormal("collect-btn")} className="ctrl-btn" type="button" title="收藏到歌单" aria-label="收藏到歌单">
-						<svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18" fill="none" stroke="currentColor" strokeWidth={2} />
+					<button id="collect-btn" ref={registerNormal("collect-btn")} className="ctrl-btn" type="button" title="收藏到歌单" aria-label="收藏到歌单" onClick={() => noticeStub("收藏到歌单需要登录和歌单列表")}>
+						<svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18" fill="none" stroke="currentColor" strokeWidth={2}><path d="M4 19.5V5a2 2 0 0 1 2-2h12v18l-6-3-6 3a2 2 0 0 1-2-1.5Z" /></svg>
 					</button>
 				</div>
 				<div className="control-cluster transport">
-					<button id="play-mode-btn" ref={modeBtnRef} className="ctrl-btn" type="button" onClick={cyclePlayModeStub} title="播放顺序">
-						<svg id="play-mode-icon" ref={modeIconRef} width="19" height="19" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" />
+					<button id="play-mode-btn" ref={modeBtnRef} className="ctrl-btn" type="button" onClick={cyclePlayModeStub} title={`播放顺序：${props.mode ?? "queue"}`}>
+						<svg id="play-mode-icon" ref={modeIconRef} width="19" height="19" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M17 1l4 4-4 4" /><path d="M3 11V9a4 4 0 0 1 4-4h14" /><path d="M7 23l-4-4 4-4" /><path d="M21 13v2a4 4 0 0 1-4 4H3" /></svg>
 					</button>
-					<button id="prev-btn" ref={registerNormal("prev-btn")} className="ctrl-btn" type="button" title="上一首" aria-label="上一首">
-						<svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18" fill="currentColor" />
+					<button id="prev-btn" ref={registerNormal("prev-btn")} className="ctrl-btn" type="button" title="上一首" aria-label="上一首" onClick={previousStub}>
+						<svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18" fill="currentColor"><path d="M6 5h2v14H6zM9 12l9-7v14z" /></svg>
 					</button>
-					<button id="play-btn" ref={playBtnRef} className="ctrl-btn" type="button" title="播放/暂停" aria-label="播放/暂停">
-						<svg id="play-icon" viewBox="0 0 24 24" aria-hidden="true" width="20" height="20" fill="currentColor" />
+					<button id="play-btn" ref={playBtnRef} className="ctrl-btn" type="button" title="播放/暂停" aria-label="播放/暂停" data-playing={props.isPlaying ? "true" : "false"} onClick={togglePlayStub}>
+						<svg id="play-icon" viewBox="0 0 24 24" aria-hidden="true" width="20" height="20" fill="currentColor">{props.isPlaying ? <path d="M7 5h4v14H7zM13 5h4v14h-4z" /> : <path d="M8 5v14l11-7z" />}</svg>
 					</button>
-					<button id="next-btn" ref={registerNormal("next-btn")} className="ctrl-btn" type="button" title="下一首" aria-label="下一首">
-						<svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18" fill="currentColor" />
+					<button id="next-btn" ref={registerNormal("next-btn")} className="ctrl-btn" type="button" title="下一首" aria-label="下一首" onClick={nextStub}>
+						<svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18" fill="currentColor"><path d="M16 5h2v14h-2zM6 5l9 7-9 7z" /></svg>
 					</button>
-					<button id="mini-queue-btn" ref={registerNormal("mini-queue-btn")} className="ctrl-btn" type="button" title="当前队列" aria-label="当前队列">
-						<svg viewBox="0 0 24 24" aria-hidden="true" width="19" height="19" fill="none" stroke="currentColor" strokeWidth={2} />
+					<button id="mini-queue-btn" ref={registerNormal("mini-queue-btn")} className="ctrl-btn" type="button" title="当前队列" aria-label="当前队列" onClick={queueStub}>
+						<svg viewBox="0 0 24 24" aria-hidden="true" width="19" height="19" fill="none" stroke="currentColor" strokeWidth={2}><path d="M8 6h13" /><path d="M8 12h13" /><path d="M8 18h13" /><path d="M3 6h.01" /><path d="M3 12h.01" /><path d="M3 18h.01" /></svg>
 					</button>
 				</div>
 				<div className="control-cluster modes">
-					<button className="ctrl-btn lyrics-toggle-btn" ref={registerNormal("lyrics-toggle-btn")} type="button" title="歌词" aria-label="歌词">
+					<button className="ctrl-btn lyrics-toggle-btn" ref={registerNormal("lyrics-toggle-btn")} type="button" title="歌词" aria-label="歌词" onClick={lyricsStub}>
 						<span className="lyrics-word-icon">词</span>
 					</button>
 					<button
@@ -202,23 +261,24 @@ export function PlayerConsoleHost(props: PlayerConsoleHostProps): ReactElement {
 						ref={registerNormal("fullscreen-toggle-btn")}
 						type="button"
 						onClick={toggleFullscreenStub}
+						onDoubleClick={() => noticeStub("全屏窗口控制将在 Tauri window 命令中接入")}
 						title="全屏 (F)"
 						aria-label="全屏"
 					>
-						<svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18" fill="none" stroke="currentColor" strokeWidth={2} />
+						<svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18" fill="none" stroke="currentColor" strokeWidth={2}><path d="M8 3H5a2 2 0 0 0-2 2v3" /><path d="M16 3h3a2 2 0 0 1 2 2v3" /><path d="M8 21H5a2 2 0 0 1-2-2v-3" /><path d="M16 21h3a2 2 0 0 0 2-2v-3" /></svg>
 					</button>
 					<div className="console-host-chrome">
 						<button className="ctrl-btn console-host-minimize" type="button" onClick={minimizeStub} aria-label="最小化" title="最小化">
-							<svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} />
+							<svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2}><path d="M5 12h14" /></svg>
 						</button>
 						<button className="ctrl-btn console-host-maximize" type="button" onClick={toggleMaximizeStub} aria-label="最大化" title="最大化">
-							<svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} />
+							<svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2}><rect x="5" y="5" width="14" height="14" rx="2" /></svg>
 						</button>
 						<button className="ctrl-btn console-host-close" type="button" onClick={closeStub} aria-label="关闭" title="关闭">
-							<svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} />
+							<svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
 						</button>
 					</div>
-					<div id="time-display">0:00 / 0:00</div>
+					<div id="time-display">{formatTime(positionMs)} / {formatTime(durationMs)}</div>
 				</div>
 			</div>
 		</div>

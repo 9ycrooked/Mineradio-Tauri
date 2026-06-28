@@ -134,6 +134,15 @@ test("HomeVisual.update syncs materialUniforms.uTime to ctx.uniforms.uTime.value
 	expect(hv.getField().materialUniforms.uTime.value as number).toBeCloseTo(1.234, 5);
 });
 
+test("HomeVisual.update fades particle alpha toward the visible baseline target", async () => {
+	const scene = makeFakeScene();
+	const hv = await createHomeVisual({ scene: scene as never, threeFactory: makeFakeThree() });
+	expect(hv.getField().materialUniforms.uAlpha.value as number).toBe(0);
+	hv.update(makeFrameCtx() as unknown as FrameContext);
+	expect(hv.getField().materialUniforms.uAlpha.value as number).toBeGreaterThan(0);
+	expect(hv.getField().materialUniforms.uAlpha.value as number).toBeLessThanOrEqual(0.96);
+});
+
 test("preset 6 (skull) suppresses points visibility; non-skull leaves points visible", async () => {
 	const scene = makeFakeScene();
 	const hv = await createHomeVisual({ scene: scene as never, threeFactory: makeFakeThree() });

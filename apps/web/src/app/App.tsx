@@ -5,6 +5,7 @@ import { selectCurrentIndex } from "../lyrics/select-current-index";
 import { useLyricsStore } from "../stores/lyrics-store";
 import { usePlaybackStore } from "../stores/playback-store";
 import { useProviderStore } from "../stores/provider-store";
+import { useSearchStore } from "../stores/search-store";
 import { useUiStore } from "../stores/ui-store";
 import { getRuntimeConfig, type RuntimeConfig } from "../tauri/runtime";
 import { BottomControlsHost } from "../components/shell/BottomControlsHost";
@@ -56,6 +57,12 @@ export function App(): ReactElement {
 	const togglePlay = usePlaybackStore((s) => s.togglePlay);
 	const setPositionMs = usePlaybackStore((s) => s.setPosition);
 	const setDurationMs = usePlaybackStore((s) => s.setDuration);
+	const setPlaybackMode = usePlaybackStore((s) => s.setMode);
+	const playbackMode = usePlaybackStore((s) => s.mode);
+	const nextTrack = usePlaybackStore((s) => s.next);
+	const previousTrack = usePlaybackStore((s) => s.previous);
+	const setSearchKeyword = useSearchStore((s) => s.setKeyword);
+	const setSearchError = useSearchStore((s) => s.setError);
 
 	const cancelledRef = useRef(false);
 	const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -85,10 +92,30 @@ export function App(): ReactElement {
 		if (input instanceof HTMLInputElement) input.focus();
 	}, []);
 
+	const searchQuery = useCallback((query: string) => {
+		setSearchKeyword(query);
+		focusSearch();
+	}, [focusSearch, setSearchKeyword]);
+
+	const showUnavailable = useCallback((message: string) => {
+		setSearchError(message);
+		focusSearch();
+	}, [focusSearch, setSearchError]);
+
 	const goHome = useCallback(() => {
 		setConsole(false);
 		focusSearch();
 	}, [focusSearch, setConsole]);
+
+	const togglePlayback = useCallback(() => {
+		const controller = controllerRef.current;
+		if (!controller) {
+			togglePlay();
+			return;
+		}
+		if (usePlaybackStore.getState().isPlaying) controller.pause();
+		else void controller.play();
+	}, [togglePlay]);
 
 	useEffect(() => {
 		if (typeof document === "undefined") return;
@@ -220,8 +247,9 @@ export function App(): ReactElement {
 
 		void (async () => {
 			try {
-				const result = await client.songUrl(currentTrack);
-				controller.load(result.url);
+				const result = await client.resolveSongUrl(currentTrack);
+				const audioUrl = result.proxied ? result.url : client.audioProxyUrl(result.url);
+				controller.load(audioUrl);
 				await controller.play();
 			} catch (e) {
 				const code = e instanceof SidecarClientError ? e.code : "AUDIO_UNKNOWN";
@@ -268,12 +296,36 @@ export function App(): ReactElement {
 			/>
 			<EmptyHomeHost
 				onSearchFocus={focusSearch}
-				onOpenLibrary={focusSearch}
+				onOpenLibrary={() => showUnavailable("歌单库需要登录后同步，先试试搜索歌单名")}
 				onOpenConsole={revealConsole}
+				onSearchQuery={searchQuery}
+				onUpload={() => showUnavailable("本地导入会在 Tauri 文件对话框中打开")}
+				onGuide={() => showUnavailable("视觉引导入口正在迁移，当前可先使用搜索和播放")}
 			/>
-			<SearchShell onFocus={focusSearch} />
-			<TopRightControls onHome={goHome} />
-			<BottomControlsHost visible={consoleVisible} onReveal={revealConsole} />
+			<SearchShell client={sidecarClient} onFocus={focusSearch} onUpload={() => showUnavailable("本地导入会在 Tauri 文件对话框中打开")} />
+			<TopRightControls
+				onHome={goHome}
+				onLogin={() => showUnavailable("登录窗口正在迁移，Netease/QQ 凭证仍需手动注入验证")}
+				onHideCapsule={() => showUnavailable("账号胶囊自动隐藏已记录，登录完成后生效")}
+			/>
+			<BottomControlsHost
+				visible={consoleVisible}
+				onReveal={revealConsole}
+				onTogglePlay={togglePlayback}
+				onPrevious={previousTrack}
+				onNext={nextTrack}
+				onModeChange={setPlaybackMode}
+				onQueue={() => showUnavailable(queue.length > 0 ? `当前队列 ${queue.length} 首，歌单架会同步显示` : "当前队列为空")}
+				onLyrics={() => showUnavailable(lyricsPayload ? "歌词已载入舞台层" : "播放歌曲后会自动加载歌词")}
+				onClose={() => setConsole(false)}
+				onNotice={showUnavailable}
+				mode={playbackMode}
+				isPlaying={isPlaying}
+				currentTitle={currentTrack?.title}
+				currentArtist={currentTrack?.artists.join(" / ")}
+				positionMs={positionMs}
+				durationMs={usePlaybackStore.getState().durationMs}
+			/>
 		</>
 	);
 }
