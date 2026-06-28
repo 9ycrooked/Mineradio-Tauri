@@ -5,9 +5,11 @@ import {
 	exportJsonFile,
 	getRuntimeConfig,
 	getSidecarStatus,
+	getWindowState,
 	importJsonFile,
 	isTauriRuntime,
 	listenGlobalHotkey,
+	listenWindowState,
 	closeWindow,
 	minimizeWindow,
 	openExternalUrl,
@@ -42,6 +44,33 @@ test("getSidecarStatus resolves to a non-crashing placeholder outside Tauri", as
 		providers: [],
 		logPath: "",
 	});
+});
+
+test("getWindowState resolves to an Electron-compatible default outside Tauri", async () => {
+	const state = await getWindowState();
+	expect(state).toEqual({
+		isMaximized: false,
+		isNativeFullScreen: false,
+		isHtmlFullScreen: false,
+		isWindowFullScreen: false,
+		isFullScreen: false,
+		isMinimized: false,
+		isVisible: false,
+		isFocused: false,
+		isPrimaryDisplay: true,
+		hasDisplayOnLeft: false,
+		hasDisplayOnRight: false,
+		displayBounds: null,
+	});
+});
+
+test("window state listener is inert outside Tauri", async () => {
+	let called = false;
+	const unlisten = await listenWindowState(() => {
+		called = true;
+	});
+	unlisten();
+	expect(called).toBe(false);
 });
 
 test("JSON file helpers return cancelled placeholders outside Tauri", async () => {

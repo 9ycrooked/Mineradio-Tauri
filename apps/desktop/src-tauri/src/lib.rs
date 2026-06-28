@@ -243,6 +243,7 @@ pub fn run() {
             commands::window_toggle_maximize,
             commands::window_toggle_fullscreen,
             commands::window_close,
+            commands::get_window_state,
             commands::open_external,
             commands::export_json_file,
             commands::import_json_file,
@@ -287,10 +288,27 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            if !matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+            if window.label() != commands::labels::MAIN {
                 return;
             }
-            if window.label() != commands::labels::MAIN {
+            let emit_mode = match event {
+                tauri::WindowEvent::Resized(_) | tauri::WindowEvent::Moved(_) => {
+                    Some(commands::WindowStateEmitMode::Debounced)
+                }
+                tauri::WindowEvent::Focused(_) | tauri::WindowEvent::ScaleFactorChanged { .. } => {
+                    Some(commands::WindowStateEmitMode::Now)
+                }
+                _ => None,
+            };
+            if let Some(mode) = emit_mode {
+                match mode {
+                    commands::WindowStateEmitMode::Now => commands::emit_window_state_for_window(window),
+                    commands::WindowStateEmitMode::Debounced => {
+                        commands::emit_window_state_debounced(window.clone());
+                    }
+                }
+            }
+            if !matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
                 return;
             }
             let state = window.state::<AppState>();

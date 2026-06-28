@@ -3,7 +3,13 @@ import { renderToStaticMarkup } from "react-dom/server";
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
-import { App, deriveSidecarRecoveryNoticeState, isHomeBlankDismissElement, shouldShowEmptyHome } from "./App";
+import {
+	App,
+	applyDesktopWindowShellState,
+	deriveSidecarRecoveryNoticeState,
+	isHomeBlankDismissElement,
+	shouldShowEmptyHome,
+} from "./App";
 import type { SplashHostProps } from "../visual/SplashHost";
 import type { SidecarStatus } from "../tauri/runtime";
 import { useLyricsStore } from "../stores/lyrics-store";
@@ -110,6 +116,50 @@ test("deriveSidecarRecoveryNoticeState only marks ready as recovered after an un
 
 	const restartedWhileReady = deriveSidecarRecoveryNoticeState(sidecarStatus({ phase: "ready", restarts: 2 }), firstReady);
 	expect(restartedWhileReady.recovered).toBe(true);
+});
+
+test("applyDesktopWindowShellState mirrors baseline desktop shell classes", async () => {
+	await import("../../../../packages/visual-engine/src/runtime/happy-dom-preload");
+	document.documentElement.className = "";
+	document.body.className = "";
+
+	applyDesktopWindowShellState({
+		isMaximized: true,
+		isNativeFullScreen: false,
+		isHtmlFullScreen: false,
+		isWindowFullScreen: true,
+		isFullScreen: false,
+		isMinimized: false,
+		isVisible: true,
+		isFocused: true,
+		isPrimaryDisplay: true,
+		hasDisplayOnLeft: false,
+		hasDisplayOnRight: false,
+		displayBounds: null,
+	});
+
+	expect(document.documentElement.classList.contains("desktop-shell-root")).toBe(true);
+	expect(document.body.classList.contains("desktop-shell")).toBe(true);
+	expect(document.body.classList.contains("desktop-maximized")).toBe(true);
+	expect(document.body.classList.contains("desktop-fullscreen")).toBe(true);
+
+	applyDesktopWindowShellState({
+		isMaximized: false,
+		isNativeFullScreen: false,
+		isHtmlFullScreen: false,
+		isWindowFullScreen: false,
+		isFullScreen: false,
+		isMinimized: false,
+		isVisible: true,
+		isFocused: true,
+		isPrimaryDisplay: true,
+		hasDisplayOnLeft: false,
+		hasDisplayOnRight: false,
+		displayBounds: null,
+	});
+
+	expect(document.body.classList.contains("desktop-maximized")).toBe(false);
+	expect(document.body.classList.contains("desktop-fullscreen")).toBe(false);
 });
 
 test("App custom lyric modal saves text and applies custom lyrics to current track", async () => {

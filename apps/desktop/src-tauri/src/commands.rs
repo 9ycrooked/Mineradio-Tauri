@@ -61,6 +61,12 @@ pub mod labels {
     pub const LOGIN_QQ: &str = "login-qq";
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WindowStateEmitMode {
+    Now,
+    Debounced,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GlobalHotkeyBinding {
@@ -97,6 +103,32 @@ pub struct ConfigureGlobalHotkeysResult {
 #[serde(rename_all = "camelCase")]
 pub struct GlobalHotkeyEventPayload {
     pub action: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WindowDisplayBounds {
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WindowStateSnapshot {
+    pub is_maximized: bool,
+    pub is_native_full_screen: bool,
+    pub is_html_full_screen: bool,
+    pub is_window_full_screen: bool,
+    pub is_full_screen: bool,
+    pub is_minimized: bool,
+    pub is_visible: bool,
+    pub is_focused: bool,
+    pub is_primary_display: bool,
+    pub has_display_on_left: bool,
+    pub has_display_on_right: bool,
+    pub display_bounds: Option<WindowDisplayBounds>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1018,7 +1050,9 @@ fn ensure_desktop_lyrics_window(app: &tauri::AppHandle) -> Result<WebviewWindow,
 #[tauri::command]
 pub fn window_minimize(app: tauri::AppHandle) -> Result<(), String> {
     let win = main_window(&app)?;
-    win.minimize().map_err(|e| e.to_string())
+    win.minimize().map_err(|e| e.to_string())?;
+    emit_window_state(&win);
+    Ok(())
 }
 
 #[tauri::command]
@@ -1029,6 +1063,7 @@ pub fn window_toggle_maximize(app: tauri::AppHandle) -> Result<(), String> {
     } else {
         win.maximize().map_err(|e| e.to_string())?;
     }
+    emit_window_state(&win);
     Ok(())
 }
 
@@ -1036,13 +1071,103 @@ pub fn window_toggle_maximize(app: tauri::AppHandle) -> Result<(), String> {
 pub fn window_toggle_fullscreen(app: tauri::AppHandle) -> Result<(), String> {
     let win = main_window(&app)?;
     let fs = win.is_fullscreen().unwrap_or(false);
-    win.set_fullscreen(!fs).map_err(|e| e.to_string())
+    win.set_fullscreen(!fs).map_err(|e| e.to_string())?;
+    emit_window_state(&win);
+    Ok(())
 }
 
 #[tauri::command]
 pub fn window_close(app: tauri::AppHandle) -> Result<(), String> {
     let win = main_window(&app)?;
     win.close().map_err(|e| e.to_string())
+}
+
+pub fn build_window_state_snapshot(
+    is_maximized: bool,
+    is_native_full_screen: bool,
+    is_minimized: bool,
+    is_visible: bool,
+    is_focused: bool,
+    is_window_full_screen: bool,
+) -> WindowStateSnapshot {
+    WindowStateSnapshot {
+        is_maximized,
+        is_native_full_screen,
+        is_html_full_screen: false,
+        is_window_full_screen,
+        is_full_screen: is_native_full_screen || is_window_full_screen,
+        is_minimized,
+        is_visible,
+        is_focused,
+        is_primary_display: true,
+        has_display_on_left: false,
+        has_display_on_right: false,
+        display_bounds: None,
+    }
+}
+
+pub fn window_state_emit_mode(event_name: &str) -> Option<WindowStateEmitMode> {
+    match event_name {
+        "maximize"
+        | "unmaximize"
+        | "minimize"
+        | "restore"
+        | "show"
+        | "hide"
+        | "focus"
+        | "blur"
+        | "enter-full-screen"
+        | "leave-full-screen" => Some(WindowStateEmitMode::Now),
+        "move" | "resize" => Some(WindowStateEmitMode::Debounced),
+        _ => None,
+    }
+}
+
+pub fn emit_window_state(window: &WebviewWindow) {
+    let is_native_full_screen = window.is_fullscreen().unwrap_or(false);
+    let snapshot = build_window_state_snapshot(
+        window.is_maximized().unwrap_or(false),
+        is_native_full_screen,
+        window.is_minimized().unwrap_or(false),
+        window.is_visible().unwrap_or(false),
+        window.is_focused().unwrap_or(false),
+        is_native_full_screen,
+    );
+    let _ = window.emit("desktop-window-state", snapshot);
+}
+
+pub fn emit_window_state_for_window(window: &tauri::Window) {
+    let is_native_full_screen = window.is_fullscreen().unwrap_or(false);
+    let snapshot = build_window_state_snapshot(
+        window.is_maximized().unwrap_or(false),
+        is_native_full_screen,
+        window.is_minimized().unwrap_or(false),
+        window.is_visible().unwrap_or(false),
+        window.is_focused().unwrap_or(false),
+        is_native_full_screen,
+    );
+    let _ = window.emit("desktop-window-state", snapshot);
+}
+
+pub fn emit_window_state_debounced(window: tauri::Window) {
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(80));
+        emit_window_state_for_window(&window);
+    });
+}
+
+#[tauri::command]
+pub fn get_window_state(app: tauri::AppHandle) -> Result<WindowStateSnapshot, String> {
+    let win = main_window(&app)?;
+    let is_native_full_screen = win.is_fullscreen().unwrap_or(false);
+    Ok(build_window_state_snapshot(
+        win.is_maximized().unwrap_or(false),
+        is_native_full_screen,
+        win.is_minimized().unwrap_or(false),
+        win.is_visible().unwrap_or(false),
+        win.is_focused().unwrap_or(false),
+        is_native_full_screen,
+    ))
 }
 
 pub fn is_openable_url(url: &str) -> bool {
@@ -1645,6 +1770,46 @@ mod tests {
             assert_eq!(program, "xdg-open");
         }
         assert_eq!(args, vec![url]);
+    }
+
+    #[test]
+    fn window_state_snapshot_matches_electron_baseline_fields() {
+        let snapshot = build_window_state_snapshot(
+            true,
+            false,
+            false,
+            true,
+            false,
+            true,
+        );
+        assert!(snapshot.is_maximized);
+        assert!(!snapshot.is_native_full_screen);
+        assert!(snapshot.is_window_full_screen);
+        assert!(snapshot.is_full_screen);
+        assert!(!snapshot.is_minimized);
+        assert!(snapshot.is_visible);
+        assert!(!snapshot.is_html_full_screen);
+        assert!(snapshot.is_primary_display);
+        assert!(!snapshot.has_display_on_left);
+        assert!(!snapshot.has_display_on_right);
+        assert!(snapshot.display_bounds.is_none());
+    }
+
+    #[test]
+    fn window_state_emit_mode_matches_electron_event_timing() {
+        assert_eq!(window_state_emit_mode("maximize"), Some(WindowStateEmitMode::Now));
+        assert_eq!(window_state_emit_mode("unmaximize"), Some(WindowStateEmitMode::Now));
+        assert_eq!(window_state_emit_mode("minimize"), Some(WindowStateEmitMode::Now));
+        assert_eq!(window_state_emit_mode("restore"), Some(WindowStateEmitMode::Now));
+        assert_eq!(window_state_emit_mode("show"), Some(WindowStateEmitMode::Now));
+        assert_eq!(window_state_emit_mode("hide"), Some(WindowStateEmitMode::Now));
+        assert_eq!(window_state_emit_mode("focus"), Some(WindowStateEmitMode::Now));
+        assert_eq!(window_state_emit_mode("blur"), Some(WindowStateEmitMode::Now));
+        assert_eq!(window_state_emit_mode("enter-full-screen"), Some(WindowStateEmitMode::Now));
+        assert_eq!(window_state_emit_mode("leave-full-screen"), Some(WindowStateEmitMode::Now));
+        assert_eq!(window_state_emit_mode("move"), Some(WindowStateEmitMode::Debounced));
+        assert_eq!(window_state_emit_mode("resize"), Some(WindowStateEmitMode::Debounced));
+        assert_eq!(window_state_emit_mode("close-requested"), None);
     }
 
     #[test]

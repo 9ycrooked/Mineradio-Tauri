@@ -19,6 +19,28 @@ export interface SidecarStatus {
 	logPath: string;
 }
 
+export interface WindowDisplayBounds {
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+}
+
+export interface WindowState {
+	isMaximized: boolean;
+	isNativeFullScreen: boolean;
+	isHtmlFullScreen: boolean;
+	isWindowFullScreen: boolean;
+	isFullScreen: boolean;
+	isMinimized: boolean;
+	isVisible: boolean;
+	isFocused: boolean;
+	isPrimaryDisplay: boolean;
+	hasDisplayOnLeft: boolean;
+	hasDisplayOnRight: boolean;
+	displayBounds: WindowDisplayBounds | null;
+}
+
 export type Unlisten = () => void;
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
@@ -88,6 +110,58 @@ interface RawSidecarStatus {
 	logPath?: string;
 }
 
+interface RawWindowDisplayBounds {
+	x?: number;
+	y?: number;
+	width?: number;
+	height?: number;
+}
+
+interface RawWindowState {
+	isMaximized?: boolean;
+	isNativeFullScreen?: boolean;
+	isHtmlFullScreen?: boolean;
+	isWindowFullScreen?: boolean;
+	isFullScreen?: boolean;
+	isMinimized?: boolean;
+	isVisible?: boolean;
+	isFocused?: boolean;
+	isPrimaryDisplay?: boolean;
+	hasDisplayOnLeft?: boolean;
+	hasDisplayOnRight?: boolean;
+	displayBounds?: RawWindowDisplayBounds | null;
+}
+
+function normalizeWindowState(raw: RawWindowState | null | undefined): WindowState {
+	if (!raw) return placeholderWindowState();
+	const displayBounds = raw.displayBounds
+		&& typeof raw.displayBounds.x === "number"
+		&& typeof raw.displayBounds.y === "number"
+		&& typeof raw.displayBounds.width === "number"
+		&& typeof raw.displayBounds.height === "number"
+		? {
+			x: raw.displayBounds.x,
+			y: raw.displayBounds.y,
+			width: raw.displayBounds.width,
+			height: raw.displayBounds.height,
+		}
+		: null;
+	return {
+		isMaximized: !!raw.isMaximized,
+		isNativeFullScreen: !!raw.isNativeFullScreen,
+		isHtmlFullScreen: !!raw.isHtmlFullScreen,
+		isWindowFullScreen: !!raw.isWindowFullScreen,
+		isFullScreen: !!raw.isFullScreen,
+		isMinimized: !!raw.isMinimized,
+		isVisible: !!raw.isVisible,
+		isFocused: !!raw.isFocused,
+		isPrimaryDisplay: raw.isPrimaryDisplay ?? true,
+		hasDisplayOnLeft: !!raw.hasDisplayOnLeft,
+		hasDisplayOnRight: !!raw.hasDisplayOnRight,
+		displayBounds,
+	};
+}
+
 export function isTauriRuntime(): boolean {
 	if (typeof window === "undefined") return false;
 	return (window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ !== undefined;
@@ -137,6 +211,23 @@ function placeholderSidecarStatus(): SidecarStatus {
 		lastHealthOkMs: null,
 		providers: [],
 		logPath: "",
+	};
+}
+
+function placeholderWindowState(): WindowState {
+	return {
+		isMaximized: false,
+		isNativeFullScreen: false,
+		isHtmlFullScreen: false,
+		isWindowFullScreen: false,
+		isFullScreen: false,
+		isMinimized: false,
+		isVisible: false,
+		isFocused: false,
+		isPrimaryDisplay: true,
+		hasDisplayOnLeft: false,
+		hasDisplayOnRight: false,
+		displayBounds: null,
 	};
 }
 
@@ -212,6 +303,24 @@ export async function getSidecarStatus(): Promise<SidecarStatus> {
 	} catch {
 		return placeholderSidecarStatus();
 	}
+}
+
+export async function getWindowState(): Promise<WindowState> {
+	if (!isTauriRuntime()) {
+		return placeholderWindowState();
+	}
+	try {
+		const raw = await invokeTauriCommand<RawWindowState>("get_window_state");
+		return normalizeWindowState(raw);
+	} catch {
+		return placeholderWindowState();
+	}
+}
+
+export async function listenWindowState(handler: (state: WindowState) => void): Promise<Unlisten> {
+	return listenTauriEvent<RawWindowState>("desktop-window-state", (payload) => {
+		handler(normalizeWindowState(payload));
+	});
 }
 
 export async function exportJsonFile(fileName: string, data: JsonValue): Promise<ExportJsonFileResult> {

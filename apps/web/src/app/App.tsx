@@ -28,7 +28,9 @@ import {
 	configureGlobalHotkeys,
 	getRuntimeConfig,
 	getSidecarStatus,
+	getWindowState,
 	importJsonFile,
+	listenWindowState,
 	listenGlobalHotkey,
 	minimizeWindow,
 	openProviderLoginWindow,
@@ -39,6 +41,7 @@ import {
 	type GlobalHotkeyBinding,
 	type RuntimeConfig,
 	type SidecarStatus,
+	type WindowState,
 } from "../tauri/runtime";
 import { BottomControlsHost } from "../components/shell/BottomControlsHost";
 import { SearchShell } from "../components/shell/SearchShell";
@@ -154,6 +157,24 @@ export function deriveSidecarRecoveryNoticeState(
 		lastError: status.lastError,
 		recovered,
 	};
+}
+
+export function isDesktopWindowFullscreen(state: WindowState): boolean {
+	return !!(
+		state.isFullScreen ||
+		state.isNativeFullScreen ||
+		state.isHtmlFullScreen ||
+		state.isWindowFullScreen ||
+		(typeof document !== "undefined" && document.fullscreenElement)
+	);
+}
+
+export function applyDesktopWindowShellState(state: WindowState): void {
+	if (typeof document === "undefined") return;
+	document.documentElement.classList.add("desktop-shell-root");
+	document.body.classList.add("desktop-shell");
+	document.body.classList.toggle("desktop-maximized", !!state.isMaximized);
+	document.body.classList.toggle("desktop-fullscreen", isDesktopWindowFullscreen(state));
 }
 
 export type AppProps = {
@@ -698,6 +719,28 @@ export function App({ SplashComponent = SplashHost, VisualComponent = VisualEngi
 			void configureGlobalHotkeys([]);
 		};
 	}, [executeGlobalHotkeyAction]);
+
+	useEffect(() => {
+		let disposed = false;
+		let unlisten: (() => void) | null = null;
+		void getWindowState().then((state) => {
+			if (!disposed) applyDesktopWindowShellState(state);
+		});
+		void listenWindowState((state) => {
+			if (!disposed) applyDesktopWindowShellState(state);
+		}).then((dispose) => {
+			if (disposed) dispose();
+			else unlisten = dispose;
+		});
+		return () => {
+			disposed = true;
+			unlisten?.();
+			if (typeof document !== "undefined") {
+				document.documentElement.classList.remove("desktop-shell-root");
+				document.body.classList.remove("desktop-shell", "desktop-maximized", "desktop-fullscreen");
+			}
+		};
+	}, []);
 
 	useEffect(() => {
 		if (typeof document === "undefined") return;
