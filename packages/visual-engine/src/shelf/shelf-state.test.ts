@@ -21,6 +21,11 @@ test("createShelfState openCardIdx starts at -1 (no open detail)", () => {
 	expect(s.openCardIdx).toBe(-1);
 });
 
+test("createShelfState pinnedOpen defaults false", () => {
+	const s = createShelfState();
+	expect(s.pinnedOpen).toBe(false);
+});
+
 test("createShelfState selectedIdx starts at -1", () => {
 	const s = createShelfState();
 	expect(s.selectedIdx).toBe(-1);

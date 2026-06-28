@@ -49,6 +49,7 @@ export interface ShelfSnapshot {
 	shelfPane: ShelfPane;
 	shelfVisibility: number;
 	openCardIdx: number;
+	pinnedOpen: boolean;
 	breathPulse: number;
 }
 
@@ -80,6 +81,8 @@ export interface ShelfManager {
 	getShelfPane(): ShelfPane;
 	setShelfVisibility(v: number): void;
 	getShelfVisibility(): number;
+	setShelfPinnedOpen(open: boolean, nowSeconds?: number): void;
+	getShelfPinnedOpen(): boolean;
 	schedulePaneSwitch(dir: number): void;
 	openDetail(idx: number, opts?: { playlistId?: string; title?: string }): void;
 	closeDetail(opts?: { immediate?: boolean }): void;
@@ -237,6 +240,16 @@ export function createShelfManager(opts: ShelfManagerOptions): ShelfManager {
 		getShelfVisibility() {
 			return state.shelfVisibility;
 		},
+		setShelfPinnedOpen(open, nowSeconds) {
+			const nextOpen = !!open;
+			if (nextOpen && !state.pinnedOpen) {
+				state.shelfOpenAnimAt = nowSeconds ?? nowFn() / 1000;
+			}
+			state.pinnedOpen = nextOpen;
+		},
+		getShelfPinnedOpen() {
+			return state.pinnedOpen;
+		},
 		schedulePaneSwitch(dir) {
 			state.paneSwitchDir = dir < 0 ? -1 : 1;
 		},
@@ -255,6 +268,7 @@ export function createShelfManager(opts: ShelfManagerOptions): ShelfManager {
 				shelfPane: state.shelfPane,
 				shelfVisibility: state.shelfVisibility,
 				openCardIdx: state.openCardIdx,
+				pinnedOpen: state.pinnedOpen,
 				breathPulse: breathPulseLast,
 			};
 		},
@@ -339,6 +353,7 @@ export function createShelfManager(opts: ShelfManagerOptions): ShelfManager {
 		if (state.mode === "side") {
 			if (!hasData && !contentOpen) return 0;
 			if (contentOpen) return 1;
+			if (state.pinnedOpen && hasData) return 1;
 			return state.presence === "always" && hasData ? 1 : 0;
 		}
 		return 0;

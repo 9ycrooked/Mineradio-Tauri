@@ -239,6 +239,26 @@ test("ShelfManager.setShelfVisibility stays in state for downstream consumers", 
 	expect(m.getSnapshot().shelfVisibility).toBeCloseTo(0.42, 4);
 });
 
+test("ShelfManager.setShelfPinnedOpen toggles pinned state and only refreshes entrance timing on closed to open", () => {
+	const m = createShelfManager({ now: () => 99000 });
+
+	m.setShelfPinnedOpen(true, 12.5);
+	expect(m.getShelfPinnedOpen()).toBe(true);
+	expect(m.getState().pinnedOpen).toBe(true);
+	expect(m.getSnapshot().pinnedOpen).toBe(true);
+	expect(m.getState().shelfOpenAnimAt).toBe(12.5);
+
+	m.setShelfPinnedOpen(true, 20);
+	expect(m.getState().shelfOpenAnimAt).toBe(12.5);
+
+	m.setShelfPinnedOpen(false);
+	expect(m.getShelfPinnedOpen()).toBe(false);
+	expect(m.getState().pinnedOpen).toBe(false);
+
+	m.setShelfPinnedOpen(true);
+	expect(m.getState().shelfOpenAnimAt).toBe(99);
+});
+
 test("ShelfManager.update fades stage shelf with data up by baseline 0.22 on first visible frame", () => {
 	const m = createShelfManager({});
 	m.setMode("stage");
@@ -263,6 +283,16 @@ test("ShelfManager.update keeps side shelf hidden for auto presence without deta
 	m.setData([{ type: "queue", title: "Auto item" }]);
 	m.update(makeCtx(createRuntimeUniforms(), 16));
 	expect(m.getShelfVisibility()).toBe(0);
+});
+
+test("ShelfManager.update fades side auto shelf with data and pinned state up by baseline 0.22", () => {
+	const m = createShelfManager({});
+	m.setMode("side");
+	m.setShelfPresence("auto");
+	m.setData([{ type: "queue", title: "Pinned auto item" }]);
+	m.setShelfPinnedOpen(true, 10);
+	m.update(makeCtx(createRuntimeUniforms(), 16));
+	expect(m.getShelfVisibility()).toBeCloseTo(0.22, 5);
 });
 
 test("ShelfManager.update treats open detail as side content and fades auto presence up", () => {

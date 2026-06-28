@@ -9,6 +9,7 @@ export interface ShelfState {
 	centerTarget: number;
 	centerSmooth: number;
 	openCardIdx: number;
+	pinnedOpen: boolean;
 	paneMemory: { mine: number; fav: number };
 	paneSwitchAt: number;
 	paneSwitchDir: number;
@@ -32,6 +33,7 @@ export function createShelfState(): ShelfState {
 		centerTarget: 0,
 		centerSmooth: 0,
 		openCardIdx: -1,
+		pinnedOpen: false,
 		paneMemory: { mine: 0, fav: 0 },
 		paneSwitchAt: -10,
 		paneSwitchDir: 1,

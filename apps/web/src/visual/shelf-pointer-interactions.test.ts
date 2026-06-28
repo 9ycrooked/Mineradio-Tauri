@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { ShelfRaycastCardHit } from "@mineradio/visual-engine";
+import type { ShelfManager, ShelfRaycastCardHit } from "@mineradio/visual-engine";
 import {
 	attachShelfPointerInteractionWiring,
 	isShelfInteractionUiTarget,
@@ -14,7 +14,40 @@ function closedSnapshot() {
 		shelfPane: "mine" as const,
 		shelfVisibility: 1,
 		openCardIdx: -1,
+		pinnedOpen: false,
 		breathPulse: 0,
+	};
+}
+
+type ShelfPointerInteractionManager = Pick<
+	ShelfManager,
+	| "getMode"
+	| "getSnapshot"
+	| "setSelectedIdx"
+	| "clearSelected"
+	| "getCenterIdx"
+	| "scrollBy"
+	| "openDetail"
+	| "closeDetail"
+	| "getShelfPinnedOpen"
+	| "setShelfPinnedOpen"
+>;
+
+function makeShelfManagerMock(
+	overrides: Partial<ShelfPointerInteractionManager>,
+): ShelfPointerInteractionManager {
+	return {
+		getMode: () => "stage",
+		getSnapshot: closedSnapshot,
+		setSelectedIdx: () => {},
+		clearSelected: () => {},
+		getCenterIdx: () => 0,
+		scrollBy: () => {},
+		openDetail: () => {},
+		closeDetail: () => {},
+		getShelfPinnedOpen: () => false,
+		setShelfPinnedOpen: () => {},
+		...overrides,
 	};
 }
 
@@ -60,6 +93,22 @@ function makeWheelEvent(opts: {
 	};
 }
 
+function makeContextMenuEvent(opts: {
+	target?: unknown;
+	clientX?: number;
+	clientY?: number;
+}) {
+	const calls: string[] = [];
+	return {
+		clientX: opts.clientX ?? 10,
+		clientY: opts.clientY ?? 20,
+		target: opts.target ?? null,
+		preventDefault: () => calls.push("preventDefault"),
+		stopPropagation: () => calls.push("stopPropagation"),
+		calls,
+	};
+}
+
 function makeHit(index: number, action: unknown = { kind: "playQueue", index }): ShelfRaycastCardHit {
 	return {
 		index,
@@ -99,7 +148,7 @@ test("attachShelfPointerInteractionWiring updates hover selection from global po
 	let hit: ShelfRaycastCardHit | null = makeHit(2);
 	const cleanup = attachShelfPointerInteractionWiring({
 		target,
-		shelfManager: {
+		shelfManager: makeShelfManagerMock({
 			getMode: () => "stage",
 			getSnapshot: closedSnapshot,
 			setSelectedIdx: (idx) => selected.push(idx),
@@ -107,7 +156,7 @@ test("attachShelfPointerInteractionWiring updates hover selection from global po
 			getCenterIdx: () => 0,
 			scrollBy: () => {},
 			openDetail: () => {},
-		},
+		}),
 		cinema: { setFocusZone: () => {} },
 		getHit: () => hit,
 		getSplashActive: () => false,
@@ -135,7 +184,7 @@ test("attachShelfPointerInteractionWiring skips hover and clicks while pointer i
 	};
 	const cleanup = attachShelfPointerInteractionWiring({
 		target,
-		shelfManager: {
+		shelfManager: makeShelfManagerMock({
 			getMode: () => "stage",
 			getSnapshot: closedSnapshot,
 			setSelectedIdx: (idx) => selected.push(idx),
@@ -143,7 +192,7 @@ test("attachShelfPointerInteractionWiring skips hover and clicks while pointer i
 			getCenterIdx: () => 1,
 			scrollBy: () => {},
 			openDetail: () => {},
-		},
+		}),
 		cinema: { setFocusZone: () => {} },
 		getHit: () => makeHit(1, { kind: "playQueue", index: 5 }),
 		getSplashActive: () => false,
@@ -176,7 +225,7 @@ test("attachShelfPointerInteractionWiring only lets shelf background targets pie
 	};
 	const cleanup = attachShelfPointerInteractionWiring({
 		target,
-		shelfManager: {
+		shelfManager: makeShelfManagerMock({
 			getMode: () => "stage",
 			getSnapshot: closedSnapshot,
 			setSelectedIdx: (idx) => selected.push(idx),
@@ -184,7 +233,7 @@ test("attachShelfPointerInteractionWiring only lets shelf background targets pie
 			getCenterIdx: () => 1,
 			scrollBy: () => {},
 			openDetail: () => {},
-		},
+		}),
 		cinema: { setFocusZone: () => {} },
 		getHit: () => makeHit(1, { kind: "playQueue", index: 5 }),
 		getSplashActive: () => false,
@@ -210,7 +259,7 @@ test("attachShelfPointerInteractionWiring ignores the click after a pointer drag
 	const played: number[] = [];
 	const cleanup = attachShelfPointerInteractionWiring({
 		target,
-		shelfManager: {
+		shelfManager: makeShelfManagerMock({
 			getMode: () => "stage",
 			getSnapshot: closedSnapshot,
 			setSelectedIdx: () => {},
@@ -218,7 +267,7 @@ test("attachShelfPointerInteractionWiring ignores the click after a pointer drag
 			getCenterIdx: () => 1,
 			scrollBy: () => {},
 			openDetail: () => {},
-		},
+		}),
 		cinema: { setFocusZone: () => {} },
 		getHit: () => makeHit(1, { kind: "playQueue", index: 5 }),
 		getSplashActive: () => false,
@@ -243,7 +292,7 @@ test("attachShelfPointerInteractionWiring clears stale drag state across pointer
 	const played: number[] = [];
 	const cleanup = attachShelfPointerInteractionWiring({
 		target,
-		shelfManager: {
+		shelfManager: makeShelfManagerMock({
 			getMode: () => "stage",
 			getSnapshot: closedSnapshot,
 			setSelectedIdx: () => {},
@@ -251,7 +300,7 @@ test("attachShelfPointerInteractionWiring clears stale drag state across pointer
 			getCenterIdx: () => 1,
 			scrollBy: () => {},
 			openDetail: () => {},
-		},
+		}),
 		cinema: { setFocusZone: () => {} },
 		getHit: () => makeHit(1, { kind: "playQueue", index: 5 }),
 		getSplashActive: () => false,
@@ -284,7 +333,7 @@ test("attachShelfPointerInteractionWiring gates hidden side shelf hits", () => {
 	let shelfVisibility = 0;
 	const cleanup = attachShelfPointerInteractionWiring({
 		target,
-		shelfManager: {
+		shelfManager: makeShelfManagerMock({
 			getMode: () => "side",
 			getSnapshot: () => ({
 				...closedSnapshot(),
@@ -296,7 +345,7 @@ test("attachShelfPointerInteractionWiring gates hidden side shelf hits", () => {
 			getCenterIdx: () => 1,
 			scrollBy: () => {},
 			openDetail: () => {},
-		},
+		}),
 		cinema: { setFocusZone: () => {} },
 		getHit: () => makeHit(1, { kind: "playQueue", index: 5 }),
 		getSplashActive: () => false,
@@ -323,7 +372,7 @@ test("attachShelfPointerInteractionWiring passes baseline always-visible side-mo
 	const pads: Array<number | undefined> = [];
 	const cleanup = attachShelfPointerInteractionWiring({
 		target,
-		shelfManager: {
+		shelfManager: makeShelfManagerMock({
 			getMode: () => "side",
 			getSnapshot: () => ({
 				...closedSnapshot(),
@@ -335,7 +384,7 @@ test("attachShelfPointerInteractionWiring passes baseline always-visible side-mo
 			getCenterIdx: () => 1,
 			scrollBy: () => {},
 			openDetail: () => {},
-		},
+		}),
 		cinema: { setFocusZone: () => {} },
 		getHit: (pointer) => {
 			pads.push(pointer.screenPad);
@@ -361,7 +410,7 @@ test("attachShelfPointerInteractionWiring leaves auto side-mode screen pad undef
 	const pads: Array<number | undefined> = [];
 	const cleanup = attachShelfPointerInteractionWiring({
 		target,
-		shelfManager: {
+		shelfManager: makeShelfManagerMock({
 			getMode: () => "side",
 			getSnapshot: () => ({
 				...closedSnapshot(),
@@ -373,7 +422,7 @@ test("attachShelfPointerInteractionWiring leaves auto side-mode screen pad undef
 			getCenterIdx: () => 1,
 			scrollBy: () => {},
 			openDetail: () => {},
-		},
+		}),
 		cinema: { setFocusZone: () => {} },
 		getHit: (pointer) => {
 			pads.push(pointer.screenPad);
@@ -394,12 +443,53 @@ test("attachShelfPointerInteractionWiring leaves auto side-mode screen pad undef
 	expect(pads).toEqual([undefined, undefined]);
 });
 
+test("attachShelfPointerInteractionWiring leaves side pinned screen pad undefined for default padded card hit", () => {
+	const target = new FakePointerTarget();
+	const pads: Array<number | undefined> = [];
+	const cleanup = attachShelfPointerInteractionWiring({
+		target,
+		shelfManager: makeShelfManagerMock({
+			getMode: () => "side",
+			getSnapshot: () => ({
+				...closedSnapshot(),
+				mode: "side" as const,
+				shelfVisibility: 0.9,
+				pinnedOpen: true,
+			}),
+			setSelectedIdx: () => {},
+			clearSelected: () => {},
+			getCenterIdx: () => 1,
+			scrollBy: () => {},
+			openDetail: () => {},
+			getShelfPinnedOpen: () => true,
+			setShelfPinnedOpen: () => {},
+		}),
+		cinema: { setFocusZone: () => {} },
+		getHit: (pointer) => {
+			pads.push(pointer.screenPad);
+			return makeHit(1, { kind: "playQueue", index: 5 });
+		},
+		getSplashActive: () => false,
+		getPortrait: () => false,
+		getWallpaperSafe: () => false,
+		getViewportWidth: () => 1200,
+		getViewportHeight: () => 900,
+		getShelfPresence: () => "always",
+	});
+
+	target.emit("pointermove", { clientX: 10, clientY: 20, target: null });
+	target.emit("click", { clientX: 10, clientY: 20, target: null });
+	cleanup();
+
+	expect(pads).toEqual([undefined, undefined]);
+});
+
 test("attachShelfPointerInteractionWiring leaves default stage screen pad undefined", () => {
 	const target = new FakePointerTarget();
 	const pads: Array<number | undefined> = [];
 	const cleanup = attachShelfPointerInteractionWiring({
 		target,
-		shelfManager: {
+		shelfManager: makeShelfManagerMock({
 			getMode: () => "stage",
 			getSnapshot: closedSnapshot,
 			setSelectedIdx: () => {},
@@ -407,7 +497,7 @@ test("attachShelfPointerInteractionWiring leaves default stage screen pad undefi
 			getCenterIdx: () => 1,
 			scrollBy: () => {},
 			openDetail: () => {},
-		},
+		}),
 		cinema: { setFocusZone: () => {} },
 		getHit: (pointer) => {
 			pads.push(pointer.screenPad);
@@ -435,7 +525,7 @@ test("attachShelfPointerInteractionWiring scrolls non-centered clicks and opens 
 	let hit = makeHit(3, { kind: "loadPlaylist", playlistId: "p3", title: "Mix 3" });
 	const cleanup = attachShelfPointerInteractionWiring({
 		target,
-		shelfManager: {
+		shelfManager: makeShelfManagerMock({
 			getMode: () => "stage",
 			getSnapshot: closedSnapshot,
 			setSelectedIdx: () => {},
@@ -445,7 +535,7 @@ test("attachShelfPointerInteractionWiring scrolls non-centered clicks and opens 
 			openDetail: (idx) => {
 				centerIdx = idx;
 			},
-		},
+		}),
 		cinema: { setFocusZone: (type, opts) => focus.push([type, opts]) },
 		getHit: () => hit,
 		getSplashActive: () => false,
@@ -472,7 +562,7 @@ test("attachShelfPointerInteractionWiring scrolls stage card-hit wheel in delta 
 	const scrolled: number[] = [];
 	const cleanup = attachShelfPointerInteractionWiring({
 		target,
-		shelfManager: {
+		shelfManager: makeShelfManagerMock({
 			getMode: () => "stage",
 			getSnapshot: closedSnapshot,
 			setSelectedIdx: () => {},
@@ -480,7 +570,7 @@ test("attachShelfPointerInteractionWiring scrolls stage card-hit wheel in delta 
 			getCenterIdx: () => 0,
 			scrollBy: (delta) => scrolled.push(delta),
 			openDetail: () => {},
-		},
+		}),
 		cinema: { setFocusZone: () => {} },
 		getHit: () => makeHit(2),
 		getSplashActive: () => false,
@@ -507,7 +597,7 @@ test("attachShelfPointerInteractionWiring ignores stage wheel without hit unless
 	const scrolled: number[] = [];
 	const cleanup = attachShelfPointerInteractionWiring({
 		target,
-		shelfManager: {
+		shelfManager: makeShelfManagerMock({
 			getMode: () => "stage",
 			getSnapshot: closedSnapshot,
 			setSelectedIdx: () => {},
@@ -515,7 +605,7 @@ test("attachShelfPointerInteractionWiring ignores stage wheel without hit unless
 			getCenterIdx: () => 0,
 			scrollBy: (delta) => scrolled.push(delta),
 			openDetail: () => {},
-		},
+		}),
 		cinema: { setFocusZone: () => {} },
 		getHit: () => null,
 		getSplashActive: () => false,
@@ -541,7 +631,7 @@ test("attachShelfPointerInteractionWiring lets stage shift wheel force scroll ev
 	const scrolled: number[] = [];
 	const cleanup = attachShelfPointerInteractionWiring({
 		target,
-		shelfManager: {
+		shelfManager: makeShelfManagerMock({
 			getMode: () => "stage",
 			getSnapshot: () => ({
 				...closedSnapshot(),
@@ -552,7 +642,7 @@ test("attachShelfPointerInteractionWiring lets stage shift wheel force scroll ev
 			getCenterIdx: () => 0,
 			scrollBy: (delta) => scrolled.push(delta),
 			openDetail: () => {},
-		},
+		}),
 		cinema: { setFocusZone: () => {} },
 		getHit: () => null,
 		getSplashActive: () => false,
@@ -576,7 +666,7 @@ test("attachShelfPointerInteractionWiring uses side always-visible 18px pad and 
 	const scrolled: number[] = [];
 	const cleanup = attachShelfPointerInteractionWiring({
 		target,
-		shelfManager: {
+		shelfManager: makeShelfManagerMock({
 			getMode: () => "side",
 			getSnapshot: () => ({
 				...closedSnapshot(),
@@ -588,7 +678,7 @@ test("attachShelfPointerInteractionWiring uses side always-visible 18px pad and 
 			getCenterIdx: () => 0,
 			scrollBy: (delta) => scrolled.push(delta),
 			openDetail: () => {},
-		},
+		}),
 		cinema: { setFocusZone: () => {} },
 		getHit: (pointer) => {
 			pads.push(pointer.screenPad);
@@ -611,12 +701,95 @@ test("attachShelfPointerInteractionWiring uses side always-visible 18px pad and 
 	expect(event.calls).toEqual(["preventDefault", "stopImmediatePropagation"]);
 });
 
+test("attachShelfPointerInteractionWiring lets side pinned wheel scroll over card hit before visibility threshold", () => {
+	const target = new FakePointerTarget();
+	const pads: Array<number | undefined> = [];
+	const scrolled: number[] = [];
+	const cleanup = attachShelfPointerInteractionWiring({
+		target,
+		shelfManager: makeShelfManagerMock({
+			getMode: () => "side",
+			getSnapshot: () => ({
+				...closedSnapshot(),
+				mode: "side" as const,
+				shelfVisibility: 0.02,
+				pinnedOpen: true,
+			}),
+			setSelectedIdx: () => {},
+			clearSelected: () => {},
+			getCenterIdx: () => 0,
+			scrollBy: (delta) => scrolled.push(delta),
+			openDetail: () => {},
+			getShelfPinnedOpen: () => true,
+			setShelfPinnedOpen: () => {},
+		}),
+		cinema: { setFocusZone: () => {} },
+		getHit: (pointer) => {
+			pads.push(pointer.screenPad);
+			return makeHit(2);
+		},
+		getSplashActive: () => false,
+		getPortrait: () => false,
+		getWallpaperSafe: () => false,
+		getViewportWidth: () => 1200,
+		getViewportHeight: () => 900,
+		getShelfPresence: () => "auto",
+	});
+
+	const event = makeWheelEvent({ deltaY: 120 });
+	target.emit("wheel", event);
+	cleanup();
+
+	expect(pads).toEqual([undefined]);
+	expect(scrolled).toEqual([1]);
+	expect(event.calls).toEqual(["preventDefault", "stopImmediatePropagation"]);
+});
+
+test("attachShelfPointerInteractionWiring lets side pinned shift wheel force scroll before visibility threshold", () => {
+	const target = new FakePointerTarget();
+	const scrolled: number[] = [];
+	const cleanup = attachShelfPointerInteractionWiring({
+		target,
+		shelfManager: makeShelfManagerMock({
+			getMode: () => "side",
+			getSnapshot: () => ({
+				...closedSnapshot(),
+				mode: "side" as const,
+				shelfVisibility: 0.02,
+				pinnedOpen: true,
+			}),
+			setSelectedIdx: () => {},
+			clearSelected: () => {},
+			getCenterIdx: () => 0,
+			scrollBy: (delta) => scrolled.push(delta),
+			openDetail: () => {},
+			getShelfPinnedOpen: () => true,
+			setShelfPinnedOpen: () => {},
+		}),
+		cinema: { setFocusZone: () => {} },
+		getHit: () => null,
+		getSplashActive: () => false,
+		getPortrait: () => false,
+		getWallpaperSafe: () => false,
+		getViewportWidth: () => 1200,
+		getViewportHeight: () => 900,
+		getShelfPresence: () => "auto",
+	});
+
+	const event = makeWheelEvent({ deltaY: -120, shiftKey: true });
+	target.emit("wheel", event);
+	cleanup();
+
+	expect(scrolled).toEqual([-1]);
+	expect(event.calls).toEqual(["preventDefault", "stopImmediatePropagation"]);
+});
+
 test("attachShelfPointerInteractionWiring lets side always shift wheel force scroll even when shelf visibility is low", () => {
 	const target = new FakePointerTarget();
 	const scrolled: number[] = [];
 	const cleanup = attachShelfPointerInteractionWiring({
 		target,
-		shelfManager: {
+		shelfManager: makeShelfManagerMock({
 			getMode: () => "side",
 			getSnapshot: () => ({
 				...closedSnapshot(),
@@ -628,7 +801,7 @@ test("attachShelfPointerInteractionWiring lets side always shift wheel force scr
 			getCenterIdx: () => 0,
 			scrollBy: (delta) => scrolled.push(delta),
 			openDetail: () => {},
-		},
+		}),
 		cinema: { setFocusZone: () => {} },
 		getHit: () => null,
 		getSplashActive: () => false,
@@ -652,7 +825,7 @@ test("attachShelfPointerInteractionWiring does not scroll side auto wheel withou
 	const scrolled: number[] = [];
 	const cleanup = attachShelfPointerInteractionWiring({
 		target,
-		shelfManager: {
+		shelfManager: makeShelfManagerMock({
 			getMode: () => "side",
 			getSnapshot: () => ({
 				...closedSnapshot(),
@@ -664,7 +837,7 @@ test("attachShelfPointerInteractionWiring does not scroll side auto wheel withou
 			getCenterIdx: () => 0,
 			scrollBy: (delta) => scrolled.push(delta),
 			openDetail: () => {},
-		},
+		}),
 		cinema: { setFocusZone: () => {} },
 		getHit: () => makeHit(2),
 		getSplashActive: () => false,
@@ -686,6 +859,158 @@ test("attachShelfPointerInteractionWiring does not scroll side auto wheel withou
 	expect(forced.calls).toEqual([]);
 });
 
+test("attachShelfPointerInteractionWiring contextmenu toggles side pinned state and focus", () => {
+	const target = new FakePointerTarget();
+	const pinnedCalls: boolean[] = [];
+	const focus: unknown[] = [];
+	let pinnedOpen = false;
+	const cleanup = attachShelfPointerInteractionWiring({
+		target,
+		shelfManager: makeShelfManagerMock({
+			getMode: () => "side",
+			getSnapshot: () => ({
+				...closedSnapshot(),
+				mode: "side" as const,
+				pinnedOpen,
+			}),
+			setSelectedIdx: () => {},
+			clearSelected: () => {},
+			getCenterIdx: () => 0,
+			scrollBy: () => {},
+			openDetail: () => {},
+			getShelfPinnedOpen: () => pinnedOpen,
+			setShelfPinnedOpen: (open) => {
+				pinnedOpen = open;
+				pinnedCalls.push(open);
+			},
+		}),
+		cinema: { setFocusZone: (type, opts) => focus.push([type, opts]) },
+		getHit: () => null,
+		getSplashActive: () => false,
+		getPortrait: () => true,
+		getWallpaperSafe: () => false,
+		getViewportWidth: () => 1200,
+		getViewportHeight: () => 900,
+	});
+
+	const open = makeContextMenuEvent({});
+	target.emit("contextmenu", open);
+	const close = makeContextMenuEvent({});
+	target.emit("contextmenu", close);
+	cleanup();
+
+	expect(open.calls).toEqual(["preventDefault", "stopPropagation"]);
+	expect(close.calls).toEqual(["preventDefault", "stopPropagation"]);
+	expect(pinnedCalls).toEqual([true, false]);
+	expect(focus).toEqual([
+		["shelf-side", { immediate: true, portrait: true, wallpaperSafe: false }],
+		[null, { immediate: true, portrait: true, wallpaperSafe: false }],
+	]);
+});
+
+test("attachShelfPointerInteractionWiring contextmenu ignores UI splash stage and off mode for this slice", () => {
+	const target = new FakePointerTarget();
+	const pinnedCalls: boolean[] = [];
+	const button = {
+		matches: (selector: string) => selector.split(",").includes("button"),
+		closest: (selector: string) => selector.split(",").includes("button") ? button : null,
+	};
+	let splashActive = false;
+	let mode: "side" | "stage" | "off" = "side";
+	const cleanup = attachShelfPointerInteractionWiring({
+		target,
+		shelfManager: makeShelfManagerMock({
+			getMode: () => mode,
+			getSnapshot: () => ({
+				...closedSnapshot(),
+				mode,
+			}),
+			setSelectedIdx: () => {},
+			clearSelected: () => {},
+			getCenterIdx: () => 0,
+			scrollBy: () => {},
+			openDetail: () => {},
+			getShelfPinnedOpen: () => false,
+			setShelfPinnedOpen: (open) => pinnedCalls.push(open),
+		}),
+		cinema: { setFocusZone: () => {} },
+		getHit: () => null,
+		getSplashActive: () => splashActive,
+		getPortrait: () => false,
+		getWallpaperSafe: () => false,
+		getViewportWidth: () => 1200,
+		getViewportHeight: () => 900,
+	});
+
+	const ui = makeContextMenuEvent({ target: button });
+	target.emit("contextmenu", ui);
+	splashActive = true;
+	const splash = makeContextMenuEvent({});
+	target.emit("contextmenu", splash);
+	splashActive = false;
+	mode = "stage";
+	const stage = makeContextMenuEvent({});
+	target.emit("contextmenu", stage);
+	mode = "off";
+	const off = makeContextMenuEvent({});
+	target.emit("contextmenu", off);
+	cleanup();
+
+	expect(pinnedCalls).toEqual([]);
+	expect(ui.calls).toEqual([]);
+	expect(splash.calls).toEqual([]);
+	expect(stage.calls).toEqual([]);
+	expect(off.calls).toEqual([]);
+});
+
+test("attachShelfPointerInteractionWiring contextmenu closes open detail, pins side shelf, and focuses side", () => {
+	const target = new FakePointerTarget();
+	const pinnedCalls: boolean[] = [];
+	const closed: unknown[] = [];
+	const focus: unknown[] = [];
+	let openCardIdx = 2;
+	const cleanup = attachShelfPointerInteractionWiring({
+		target,
+		shelfManager: makeShelfManagerMock({
+			getMode: () => "side",
+			getSnapshot: () => ({
+				...closedSnapshot(),
+				mode: "side" as const,
+				openCardIdx,
+			}),
+			setSelectedIdx: () => {},
+			clearSelected: () => {},
+			getCenterIdx: () => 0,
+			scrollBy: () => {},
+			openDetail: () => {},
+			closeDetail: (opts) => {
+				openCardIdx = -1;
+				closed.push(opts);
+			},
+			getShelfPinnedOpen: () => false,
+			setShelfPinnedOpen: (open) => pinnedCalls.push(open),
+		}),
+		cinema: { setFocusZone: (type, opts) => focus.push([type, opts]) },
+		getHit: () => null,
+		getSplashActive: () => false,
+		getPortrait: () => false,
+		getWallpaperSafe: () => true,
+		getViewportWidth: () => 1200,
+		getViewportHeight: () => 900,
+	});
+
+	const event = makeContextMenuEvent({});
+	target.emit("contextmenu", event);
+	cleanup();
+
+	expect(event.calls).toEqual(["preventDefault", "stopPropagation"]);
+	expect(closed).toEqual([{ immediate: true }]);
+	expect(pinnedCalls).toEqual([true]);
+	expect(focus).toEqual([
+		["shelf-side", { immediate: true, portrait: false, wallpaperSafe: true }],
+	]);
+});
+
 test("attachShelfPointerInteractionWiring ignores wheel over UI, splash, open detail snapshot, and mode off", () => {
 	const target = new FakePointerTarget();
 	const scrolled: number[] = [];
@@ -698,7 +1023,7 @@ test("attachShelfPointerInteractionWiring ignores wheel over UI, splash, open de
 	let openCardIdx = -1;
 	const cleanup = attachShelfPointerInteractionWiring({
 		target,
-		shelfManager: {
+		shelfManager: makeShelfManagerMock({
 			getMode: () => mode,
 			getSnapshot: () => ({
 				...closedSnapshot(),
@@ -710,7 +1035,7 @@ test("attachShelfPointerInteractionWiring ignores wheel over UI, splash, open de
 			getCenterIdx: () => 0,
 			scrollBy: (delta) => scrolled.push(delta),
 			openDetail: () => {},
-		},
+		}),
 		cinema: { setFocusZone: () => {} },
 		getHit: () => makeHit(2),
 		getSplashActive: () => splashActive,
@@ -742,12 +1067,13 @@ test("attachShelfPointerInteractionWiring ignores wheel over UI, splash, open de
 	expect(off.calls).toEqual([]);
 });
 
-test("attachShelfPointerInteractionWiring cleanup removes wheel listener", () => {
+test("attachShelfPointerInteractionWiring cleanup removes wheel and contextmenu listeners", () => {
 	const target = new FakePointerTarget();
 	const scrolled: number[] = [];
+	const pinnedCalls: boolean[] = [];
 	const cleanup = attachShelfPointerInteractionWiring({
 		target,
-		shelfManager: {
+		shelfManager: makeShelfManagerMock({
 			getMode: () => "stage",
 			getSnapshot: closedSnapshot,
 			setSelectedIdx: () => {},
@@ -755,7 +1081,10 @@ test("attachShelfPointerInteractionWiring cleanup removes wheel listener", () =>
 			getCenterIdx: () => 0,
 			scrollBy: (delta) => scrolled.push(delta),
 			openDetail: () => {},
-		},
+			getShelfPinnedOpen: () => false,
+			setShelfPinnedOpen: (open) => pinnedCalls.push(open),
+			closeDetail: () => {},
+		}),
 		cinema: { setFocusZone: () => {} },
 		getHit: () => makeHit(2),
 		getSplashActive: () => false,
@@ -767,7 +1096,10 @@ test("attachShelfPointerInteractionWiring cleanup removes wheel listener", () =>
 
 	cleanup();
 	target.emit("wheel", makeWheelEvent({ deltaY: 120 }));
+	target.emit("contextmenu", makeContextMenuEvent({}));
 
 	expect(target.listeners.get("wheel")?.size ?? 0).toBe(0);
+	expect(target.listeners.get("contextmenu")?.size ?? 0).toBe(0);
 	expect(scrolled).toEqual([]);
+	expect(pinnedCalls).toEqual([]);
 });

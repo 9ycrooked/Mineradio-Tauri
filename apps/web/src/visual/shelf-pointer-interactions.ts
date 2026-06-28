@@ -23,6 +23,9 @@ export interface ShelfPointerInteractionOptions {
 		| "getCenterIdx"
 		| "scrollBy"
 		| "openDetail"
+		| "closeDetail"
+		| "getShelfPinnedOpen"
+		| "setShelfPinnedOpen"
 	>;
 	cinema: Pick<CinemaCamera, "setFocusZone">;
 	getHit: ShelfPointerRaycastHitGetter;
@@ -107,6 +110,10 @@ export function attachShelfPointerInteractionWiring(
 		opts.shelfManager.clearSelected();
 	};
 
+	const isShelfPinnedOpen = (): boolean => {
+		return opts.shelfManager.getShelfPinnedOpen();
+	};
+
 	const canStartInteraction = (event: Event): boolean => {
 		if (opts.getSplashActive()) return false;
 		if (opts.shelfManager.getMode() === "off") return false;
@@ -122,6 +129,7 @@ export function attachShelfPointerInteractionWiring(
 		const mode = opts.shelfManager.getMode();
 		if (mode === "stage") return true;
 		if (mode !== "side") return false;
+		if (isShelfPinnedOpen()) return true;
 		return snapshot.shelfVisibility > 0.34;
 	};
 
@@ -129,7 +137,7 @@ export function attachShelfPointerInteractionWiring(
 		if (!canUseHit(hit)) return false;
 		const mode = opts.shelfManager.getMode();
 		if (mode === "stage") return true;
-		return mode === "side" && opts.getShelfPresence?.() === "always";
+		return mode === "side" && (isShelfPinnedOpen() || opts.getShelfPresence?.() === "always");
 	};
 
 	const canForceWheelScroll = (event: WheelEvent): boolean => {
@@ -137,7 +145,7 @@ export function attachShelfPointerInteractionWiring(
 		const mode = opts.shelfManager.getMode();
 		if (mode === "stage") return true;
 		if (mode !== "side") return false;
-		return opts.getShelfPresence?.() === "always";
+		return isShelfPinnedOpen() || opts.getShelfPresence?.() === "always";
 	};
 
 	const pointerInfoFromEvent = (event: PointerEvent | MouseEvent): ShelfPointerRaycastInfo => {
@@ -149,7 +157,7 @@ export function attachShelfPointerInteractionWiring(
 			clientY: event.clientY,
 			viewportWidth: opts.getViewportWidth(),
 			viewportHeight: opts.getViewportHeight(),
-			screenPad: mode === "side" && shelfAlwaysVisible && snapshot.shelfVisibility > 0.34 ? 18 : undefined,
+			screenPad: mode === "side" && !isShelfPinnedOpen() && shelfAlwaysVisible ? 18 : undefined,
 		};
 	};
 
@@ -228,12 +236,42 @@ export function attachShelfPointerInteractionWiring(
 		opts.shelfManager.scrollBy(wheelEvent.deltaY > 0 ? 1 : -1);
 	};
 
+	const onContextMenu: EventListener = (event) => {
+		if (opts.getSplashActive()) return;
+		if (isShelfInteractionUiTarget(event.target)) return;
+		if (!isShelfInteractionBackgroundTarget(event.target)) return;
+		if (opts.shelfManager.getMode() !== "side") return;
+		event.preventDefault();
+		event.stopPropagation?.();
+		const focusSide = (): void => {
+			opts.cinema.setFocusZone("shelf-side", {
+				immediate: true,
+				portrait: opts.getPortrait(),
+				wallpaperSafe: opts.getWallpaperSafe(),
+			});
+		};
+		if (opts.shelfManager.getSnapshot().openCardIdx >= 0) {
+			opts.shelfManager.closeDetail({ immediate: true });
+			opts.shelfManager.setShelfPinnedOpen(true);
+			focusSide();
+			return;
+		}
+		const nextOpen = !isShelfPinnedOpen();
+		opts.shelfManager.setShelfPinnedOpen(nextOpen);
+		opts.cinema.setFocusZone(nextOpen ? "shelf-side" : null, {
+			immediate: true,
+			portrait: opts.getPortrait(),
+			wallpaperSafe: opts.getWallpaperSafe(),
+		});
+	};
+
 	opts.target.addEventListener("pointerdown", onPointerDown);
 	opts.target.addEventListener("pointerup", onPointerUp);
 	opts.target.addEventListener("pointercancel", onPointerCancel);
 	opts.target.addEventListener("pointermove", onPointerMove);
 	opts.target.addEventListener("click", onClick);
 	opts.target.addEventListener("wheel", onWheel, WHEEL_LISTENER_OPTIONS);
+	opts.target.addEventListener("contextmenu", onContextMenu);
 	opts.target.addEventListener("blur", onPointerCancel);
 
 	return () => {
@@ -244,6 +282,7 @@ export function attachShelfPointerInteractionWiring(
 		opts.target.removeEventListener("pointermove", onPointerMove);
 		opts.target.removeEventListener("click", onClick);
 		opts.target.removeEventListener("wheel", onWheel, WHEEL_REMOVE_OPTIONS);
+		opts.target.removeEventListener("contextmenu", onContextMenu);
 		opts.target.removeEventListener("blur", onPointerCancel);
 	};
 }
