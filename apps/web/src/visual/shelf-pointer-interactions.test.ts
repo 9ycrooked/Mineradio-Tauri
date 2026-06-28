@@ -31,6 +31,10 @@ type ShelfPointerInteractionManager = Pick<
 	| "closeDetail"
 	| "getShelfPinnedOpen"
 	| "setShelfPinnedOpen"
+	| "updateShelfHoverCueFromPointer"
+	| "clearShelfHoverCue"
+	| "getShelfHoverCueValue"
+	| "getShelfHoverCuePreviewVisible"
 >;
 
 function makeShelfManagerMock(
@@ -47,6 +51,10 @@ function makeShelfManagerMock(
 		closeDetail: () => {},
 		getShelfPinnedOpen: () => false,
 		setShelfPinnedOpen: () => {},
+		updateShelfHoverCueFromPointer: () => {},
+		clearShelfHoverCue: () => {},
+		getShelfHoverCueValue: () => 0,
+		getShelfHoverCuePreviewVisible: () => false,
 		...overrides,
 	};
 }
@@ -365,6 +373,155 @@ test("attachShelfPointerInteractionWiring gates hidden side shelf hits", () => {
 
 	expect(selected).toEqual([-1, 1]);
 	expect(played).toEqual([5]);
+});
+
+test("attachShelfPointerInteractionWiring updates side auto hover cue inside baseline click hot-zone", () => {
+	const target = new FakePointerTarget();
+	const cuePointers: Array<{ clientX: number; clientY: number } | null> = [];
+	const cleanup = attachShelfPointerInteractionWiring({
+		target,
+		shelfManager: makeShelfManagerMock({
+			getMode: () => "side",
+			getSnapshot: () => ({
+				...closedSnapshot(),
+				mode: "side" as const,
+				presence: "auto" as const,
+				shelfVisibility: 0,
+			}),
+			clearSelected: () => {},
+			updateShelfHoverCueFromPointer: (pointer) => cuePointers.push(pointer),
+			clearShelfHoverCue: () => cuePointers.push(null),
+		}),
+		cinema: { setFocusZone: () => {} },
+		getHit: () => null,
+		getSplashActive: () => false,
+		getPortrait: () => false,
+		getWallpaperSafe: () => false,
+		getViewportWidth: () => 1200,
+		getViewportHeight: () => 900,
+		getShelfPresence: () => "auto",
+		getShelfPreviewActive: () => false,
+	});
+
+	target.emit("pointermove", { clientX: 1100, clientY: 300, target: null });
+	cleanup();
+
+	expect(cuePointers).toEqual([{ clientX: 1100, clientY: 300 }]);
+});
+
+test("attachShelfPointerInteractionWiring updates side auto hover cue in preview-use zone only while preview visible", () => {
+	const target = new FakePointerTarget();
+	const cuePointers: Array<{ clientX: number; clientY: number } | null> = [];
+	let previewActive = false;
+	const cleanup = attachShelfPointerInteractionWiring({
+		target,
+		shelfManager: makeShelfManagerMock({
+			getMode: () => "side",
+			getSnapshot: () => ({
+				...closedSnapshot(),
+				mode: "side" as const,
+				presence: "auto" as const,
+				shelfVisibility: previewActive ? 0.18 : 0,
+			}),
+			clearSelected: () => {},
+			updateShelfHoverCueFromPointer: (pointer) => cuePointers.push(pointer),
+			clearShelfHoverCue: () => cuePointers.push(null),
+		}),
+		cinema: { setFocusZone: () => {} },
+		getHit: () => null,
+		getSplashActive: () => false,
+		getPortrait: () => false,
+		getWallpaperSafe: () => false,
+		getViewportWidth: () => 1200,
+		getViewportHeight: () => 900,
+		getShelfPresence: () => "auto",
+		getShelfPreviewActive: () => previewActive,
+	});
+
+	target.emit("pointermove", { clientX: 700, clientY: 300, target: null });
+	previewActive = true;
+	target.emit("pointermove", { clientX: 700, clientY: 300, target: null });
+	cleanup();
+
+	expect(cuePointers).toEqual([null, { clientX: 700, clientY: 300 }]);
+});
+
+test("attachShelfPointerInteractionWiring preserves early side auto preview handoff from cue value before visibility threshold", () => {
+	const target = new FakePointerTarget();
+	const cuePointers: Array<{ clientX: number; clientY: number } | null> = [];
+	const cleanup = attachShelfPointerInteractionWiring({
+		target,
+		shelfManager: makeShelfManagerMock({
+			getMode: () => "side",
+			getSnapshot: () => ({
+				...closedSnapshot(),
+				mode: "side" as const,
+				presence: "auto" as const,
+				shelfVisibility: 0.04,
+			}),
+			clearSelected: () => {},
+			updateShelfHoverCueFromPointer: (pointer) => cuePointers.push(pointer),
+			clearShelfHoverCue: () => cuePointers.push(null),
+			getShelfHoverCueValue: () => 0.12,
+			getShelfHoverCuePreviewVisible: () => true,
+		}),
+		cinema: { setFocusZone: () => {} },
+		getHit: () => null,
+		getSplashActive: () => false,
+		getPortrait: () => false,
+		getWallpaperSafe: () => false,
+		getViewportWidth: () => 1200,
+		getViewportHeight: () => 900,
+		getShelfPresence: () => "auto",
+		getShelfPreviewActive: () => false,
+	});
+
+	target.emit("pointermove", { clientX: 700, clientY: 300, target: null });
+	cleanup();
+
+	expect(cuePointers).toEqual([{ clientX: 700, clientY: 300 }]);
+});
+
+test("attachShelfPointerInteractionWiring clears hover cue on UI target, pointer leave, and mode off", () => {
+	const target = new FakePointerTarget();
+	const cleared: string[] = [];
+	let mode: "side" | "off" = "side";
+	const button = {
+		matches: (selector: string) => selector.split(",").includes("button"),
+		closest: (selector: string) => selector.split(",").includes("button") ? button : null,
+	};
+	const cleanup = attachShelfPointerInteractionWiring({
+		target,
+		shelfManager: makeShelfManagerMock({
+			getMode: () => mode,
+			getSnapshot: () => ({
+				...closedSnapshot(),
+				mode,
+				presence: "auto" as const,
+				shelfVisibility: 0.2,
+			}),
+			clearSelected: () => cleared.push("selection"),
+			updateShelfHoverCueFromPointer: () => {},
+			clearShelfHoverCue: () => cleared.push("cue"),
+		}),
+		cinema: { setFocusZone: () => {} },
+		getHit: () => null,
+		getSplashActive: () => false,
+		getPortrait: () => false,
+		getWallpaperSafe: () => false,
+		getViewportWidth: () => 1200,
+		getViewportHeight: () => 900,
+		getShelfPresence: () => "auto",
+		getShelfPreviewActive: () => true,
+	});
+
+	target.emit("pointermove", { clientX: 1100, clientY: 300, target: button });
+	target.emit("pointerleave", { clientX: 1100, clientY: 300, target: null });
+	mode = "off";
+	target.emit("pointermove", { clientX: 1100, clientY: 300, target: null });
+	cleanup();
+
+	expect(cleared).toEqual(["cue", "selection", "cue", "selection", "cue", "selection"]);
 });
 
 test("attachShelfPointerInteractionWiring passes baseline always-visible side-mode 18px screen pad to hover and click hit lookup", () => {
@@ -1501,9 +1658,11 @@ test("attachShelfPointerInteractionWiring cleanup removes wheel and contextmenu 
 	cleanup();
 	target.emit("wheel", makeWheelEvent({ deltaY: 120 }));
 	target.emit("contextmenu", makeContextMenuEvent({}));
+	target.emit("pointerleave", { clientX: 1100, clientY: 300, target: null });
 
 	expect(target.listeners.get("wheel")?.size ?? 0).toBe(0);
 	expect(target.listeners.get("contextmenu")?.size ?? 0).toBe(0);
+	expect(target.listeners.get("pointerleave")?.size ?? 0).toBe(0);
 	expect(scrolled).toEqual([]);
 	expect(pinnedCalls).toEqual([]);
 });

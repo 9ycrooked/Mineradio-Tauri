@@ -10,9 +10,9 @@ import {
 	type ShelfManager,
 } from "./shelf-animate";
 
-function makeCtx(uniforms: RuntimeUniforms, now = 0): FrameContext {
+function makeCtx(uniforms: RuntimeUniforms, now = 0, dt = 0): FrameContext {
 	return {
-		dt: 0,
+		dt,
 		now,
 		snapshot: {} as never,
 		uniforms,
@@ -283,6 +283,86 @@ test("ShelfManager.update keeps side shelf hidden for auto presence without deta
 	m.setData([{ type: "queue", title: "Auto item" }]);
 	m.update(makeCtx(createRuntimeUniforms(), 16));
 	expect(m.getShelfVisibility()).toBe(0);
+});
+
+test("ShelfManager hover cue waits baseline 260ms before raising side auto visibility", () => {
+	let now = 1000;
+	const m = createShelfManager({ now: () => now });
+	m.setMode("side");
+	m.setShelfPresence("auto");
+	m.setData([{ type: "queue", title: "Auto cue item" }]);
+
+	m.updateShelfHoverCueFromPointer({ clientX: 1100, clientY: 300 });
+	m.update(makeCtx(createRuntimeUniforms(), 1016, 1 / 60));
+	expect(m.getState().shelfHoverCue.zoneActive).toBe(true);
+	expect(m.getState().shelfHoverCue.target).toBe(0);
+	expect(m.getShelfVisibility()).toBe(0);
+
+	now = 1261;
+	m.update(makeCtx(createRuntimeUniforms(), 1277, 1 / 60));
+	expect(m.getState().shelfHoverCue.target).toBe(1);
+	expect(m.getState().shelfHoverCue.value).toBeCloseTo(0.12, 5);
+	expect(m.getShelfVisibility()).toBeCloseTo(0.16 * 0.22, 5);
+});
+
+test("ShelfManager hover cue preview-visible predicate follows baseline guide zone target value and visibility thresholds", () => {
+	const m = createShelfManager({});
+	const cue = m.getState().shelfHoverCue;
+
+	expect(m.getShelfHoverCuePreviewVisible()).toBe(false);
+	cue.zoneActive = true;
+	expect(m.getShelfHoverCuePreviewVisible()).toBe(true);
+	cue.zoneActive = false;
+	cue.target = 1;
+	expect(m.getShelfHoverCuePreviewVisible()).toBe(true);
+	cue.target = 0;
+	cue.value = 0.101;
+	expect(m.getShelfHoverCuePreviewVisible()).toBe(true);
+	cue.value = 0;
+	m.setShelfVisibility(0.121);
+	expect(m.getShelfHoverCuePreviewVisible()).toBe(true);
+	m.setShelfVisibility(0);
+	cue.guide = true;
+	expect(m.getShelfHoverCuePreviewVisible()).toBe(true);
+});
+
+test("ShelfManager hover cue clears after invalid pointer and baseline idle timeout", () => {
+	let now = 2000;
+	const m = createShelfManager({ now: () => now });
+	m.setMode("side");
+	m.setShelfPresence("auto");
+	m.setData([{ type: "queue", title: "Auto cue item" }]);
+
+	m.updateShelfHoverCueFromPointer({ clientX: 1100, clientY: 300 });
+	now = 2261;
+	m.update(makeCtx(createRuntimeUniforms(), 2261));
+	expect(m.getState().shelfHoverCue.value).toBeCloseTo(0.12, 5);
+
+	m.updateShelfHoverCueFromPointer(null);
+	expect(m.getState().shelfHoverCue.zoneActive).toBe(false);
+	expect(m.getState().shelfHoverCue.target).toBe(0);
+
+	now = 2950;
+	m.getState().shelfHoverCue.value = 0.005;
+	m.update(makeCtx(createRuntimeUniforms(), 2950));
+	expect(m.getState().shelfHoverCue.value).toBe(0);
+});
+
+test("ShelfManager clears hover cue eligibility when side auto state becomes invalid without pointer movement", () => {
+	let now = 3000;
+	const m = createShelfManager({ now: () => now });
+	m.setMode("side");
+	m.setShelfPresence("auto");
+	m.setData([{ type: "queue", title: "Auto cue item" }]);
+
+	m.updateShelfHoverCueFromPointer({ clientX: 1100, clientY: 300 });
+	now = 3261;
+	m.openDetail(0);
+	m.update(makeCtx(createRuntimeUniforms(), 3261, 1 / 60));
+
+	expect(m.getState().shelfHoverCue.zoneActive).toBe(false);
+	expect(m.getState().shelfHoverCue.target).toBe(0);
+	expect(m.getState().shelfHoverCue.value).toBe(0);
 });
 
 test("ShelfManager.update fades side auto shelf with data and pinned state up by baseline 0.22", () => {

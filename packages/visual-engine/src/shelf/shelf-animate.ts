@@ -83,6 +83,10 @@ export interface ShelfManager {
 	getShelfVisibility(): number;
 	setShelfPinnedOpen(open: boolean, nowSeconds?: number): void;
 	getShelfPinnedOpen(): boolean;
+	updateShelfHoverCueFromPointer(pointer: { clientX: number; clientY: number } | null): void;
+	clearShelfHoverCue(): void;
+	getShelfHoverCueValue(): number;
+	getShelfHoverCuePreviewVisible(): boolean;
 	schedulePaneSwitch(dir: number): void;
 	openDetail(idx: number, opts?: { playlistId?: string; title?: string }): void;
 	closeDetail(opts?: { immediate?: boolean }): void;
@@ -116,6 +120,7 @@ export function createShelfManager(opts: ShelfManagerOptions): ShelfManager {
 	let renderedWindowSig = "";
 	let breathPulseLast = 0;
 	let lastFrameNow = 0;
+	let lastUpdateDtSeconds = 1 / 60;
 	const nowFn =
 		opts.now ??
 		(() => (typeof performance !== "undefined" ? performance.now() : Date.now()));
@@ -138,6 +143,7 @@ export function createShelfManager(opts: ShelfManagerOptions): ShelfManager {
 			if (lastFrameNow === 0) lastFrameNow = ctx.now;
 			const dtMs = Math.max(0, ctx.now - lastFrameNow);
 			lastFrameNow = ctx.now;
+			lastUpdateDtSeconds = Number.isFinite(ctx.dt) && ctx.dt > 0 ? ctx.dt : dtMs > 0 ? dtMs / 1000 : 1 / 60;
 
 			state.centerSmooth += (state.centerTarget - state.centerSmooth) * 0.16;
 			if (Math.abs(state.centerSmooth - state.centerTarget) < 0.001) {
@@ -250,6 +256,18 @@ export function createShelfManager(opts: ShelfManagerOptions): ShelfManager {
 		getShelfPinnedOpen() {
 			return state.pinnedOpen;
 		},
+		updateShelfHoverCueFromPointer(pointer) {
+			updateShelfHoverCueFromPointer(pointer);
+		},
+		clearShelfHoverCue() {
+			updateShelfHoverCueFromPointer(null);
+		},
+		getShelfHoverCueValue() {
+			return state.shelfHoverCue.value;
+		},
+		getShelfHoverCuePreviewVisible() {
+			return isShelfHoverCuePreviewVisible();
+		},
 		schedulePaneSwitch(dir) {
 			state.paneSwitchDir = dir < 0 ? -1 : 1;
 		},
@@ -335,6 +353,9 @@ export function createShelfManager(opts: ShelfManagerOptions): ShelfManager {
 	};
 
 	function updateShelfVisibility(): void {
+		const dtSeconds = ctxDtSeconds();
+		syncShelfHoverCueEligibility();
+		tickShelfHoverCue(dtSeconds);
 		const target = computeShelfVisibilityTarget();
 		const ease = target > state.shelfVisibility ? 0.22 : 0.18;
 		state.shelfVisibility += (target - state.shelfVisibility) * ease;
@@ -354,9 +375,64 @@ export function createShelfManager(opts: ShelfManagerOptions): ShelfManager {
 			if (!hasData && !contentOpen) return 0;
 			if (contentOpen) return 1;
 			if (state.pinnedOpen && hasData) return 1;
-			return state.presence === "always" && hasData ? 1 : 0;
+			if (state.presence === "always" && hasData) return 1;
+			return state.shelfHoverCue.value > 0.01
+				? Math.max(0.16, state.shelfHoverCue.value * 0.88)
+				: 0;
 		}
 		return 0;
+	}
+
+	function updateShelfHoverCueFromPointer(pointer: { clientX: number; clientY: number } | null): void {
+		const cue = state.shelfHoverCue;
+		if (!pointer) {
+			if (!cue.guide) cue.target = 0;
+			cue.zoneActive = false;
+			cue.enteredAt = 0;
+			return;
+		}
+		if (!cue.zoneActive) {
+			cue.zoneActive = true;
+			cue.enteredAt = nowFn();
+		}
+		if (!cue.guide) cue.target = 0;
+		cue.x = pointer.clientX;
+		cue.y = pointer.clientY;
+		cue.lastAt = nowFn();
+	}
+
+	function isShelfHoverCuePreviewVisible(): boolean {
+		const cue = state.shelfHoverCue;
+		return cue.guide || cue.zoneActive || cue.target > 0 || cue.value > 0.10 || state.shelfVisibility > 0.12;
+	}
+
+	function tickShelfHoverCue(dtSeconds: number): number {
+		const cue = state.shelfHoverCue;
+		const now = nowFn();
+		if (!cue.guide && cue.zoneActive && now - cue.enteredAt > 260) {
+			cue.target = 1;
+		}
+		if (!cue.guide && !cue.zoneActive && now - cue.lastAt > 650) {
+			cue.target = 0;
+		}
+		const target = cue.guide ? 1 : cue.target;
+		const rate = target > cue.value ? 0.12 : 0.10;
+		cue.value += (target - cue.value) * Math.min(1, rate * Math.max(1, dtSeconds * 60));
+		if (cue.value < 0.006 && !target) cue.value = 0;
+		cue.value = clampRange(cue.value, 0, 1);
+		return cue.value;
+	}
+
+	function syncShelfHoverCueEligibility(): void {
+		if (state.shelfHoverCue.guide) return;
+		if (!state.appRevealed || state.mode !== "side" || state.presence !== "auto" || state.pinnedOpen || state.openCardIdx >= 0 || data.length <= 0) {
+			updateShelfHoverCueFromPointer(null);
+		}
+	}
+
+	function ctxDtSeconds(): number {
+		if (!Number.isFinite(lastUpdateDtSeconds)) return 1 / 60;
+		return lastUpdateDtSeconds;
 	}
 
 	function shouldShowShelfGroup(): boolean {

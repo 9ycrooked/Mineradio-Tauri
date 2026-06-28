@@ -26,6 +26,10 @@ export interface ShelfPointerInteractionOptions {
 		| "closeDetail"
 		| "getShelfPinnedOpen"
 		| "setShelfPinnedOpen"
+		| "updateShelfHoverCueFromPointer"
+		| "clearShelfHoverCue"
+		| "getShelfHoverCueValue"
+		| "getShelfHoverCuePreviewVisible"
 	>;
 	cinema: Pick<CinemaCamera, "setFocusZone">;
 	getHit: ShelfPointerRaycastHitGetter;
@@ -74,6 +78,37 @@ function getShelfWheelZoneWidth(viewportWidth: number, viewportHeight: number): 
 	const hotZoneWidth = Math.min(portrait ? 280 : 360, Math.max(148, viewportWidth * hotZoneRatio));
 	const ratioWidth = viewportWidth * (portrait ? 0.24 : 0.18);
 	return Math.min(portrait ? 280 : 360, Math.max(hotZoneWidth, ratioWidth));
+}
+
+function getShelfHotZoneWidth(viewportWidth: number, viewportHeight: number): number {
+	const portrait = viewportHeight > viewportWidth * 1.08;
+	const ratio = portrait ? 0.26 : 0.18;
+	return Math.min(portrait ? 280 : 360, Math.max(148, viewportWidth * ratio));
+}
+
+function getShelfPreviewUseZoneWidth(viewportWidth: number, viewportHeight: number): number {
+	return Math.min(820, Math.max(getShelfHotZoneWidth(viewportWidth, viewportHeight), viewportWidth * 0.56));
+}
+
+export function isShelfClickZone(
+	pointer: { clientX: number; clientY: number },
+	viewportWidth: number,
+	viewportHeight: number,
+	pinnedOpen: boolean,
+): boolean {
+	const edge = pinnedOpen
+		? Math.min(390, Math.max(210, viewportWidth * 0.22))
+		: getShelfHotZoneWidth(viewportWidth, viewportHeight);
+	return pointer.clientX > viewportWidth - edge && pointer.clientY > 130 && pointer.clientY < viewportHeight - 150;
+}
+
+export function isShelfPreviewUseZone(
+	pointer: { clientX: number; clientY: number },
+	viewportWidth: number,
+	viewportHeight: number,
+): boolean {
+	const edge = getShelfPreviewUseZoneWidth(viewportWidth, viewportHeight);
+	return pointer.clientX > viewportWidth - edge && pointer.clientY > 96 && pointer.clientY < viewportHeight - 96;
 }
 
 function isShelfWheelZone(event: WheelEvent, viewportWidth: number, viewportHeight: number): boolean {
@@ -125,6 +160,12 @@ export function attachShelfPointerInteractionWiring(
 		opts.shelfManager.clearSelected();
 	};
 
+	const clearHoverCueAndSelection = (): void => {
+		if (disposed) return;
+		opts.shelfManager.clearShelfHoverCue();
+		opts.shelfManager.clearSelected();
+	};
+
 	const isShelfPinnedOpen = (): boolean => {
 		return opts.shelfManager.getShelfPinnedOpen();
 	};
@@ -133,7 +174,7 @@ export function attachShelfPointerInteractionWiring(
 		if (opts.shelfManager.getMode() !== "side") return false;
 		if (isShelfPinnedOpen()) return false;
 		if (opts.getShelfPresence?.() !== "auto") return false;
-		return opts.getShelfPreviewActive?.() === true;
+		return opts.getShelfPreviewActive?.() === true || opts.shelfManager.getShelfHoverCuePreviewVisible();
 	};
 
 	const canStartInteraction = (event: Event): boolean => {
@@ -143,6 +184,21 @@ export function attachShelfPointerInteractionWiring(
 		if (isShelfInteractionUiTarget(event.target)) return false;
 		if (!isShelfInteractionBackgroundTarget(event.target)) return false;
 		return true;
+	};
+
+	const canShowShelfHoverCueAt = (event: PointerEvent | MouseEvent): boolean => {
+		if (opts.getSplashActive()) return false;
+		if (opts.shelfManager.getMode() !== "side") return false;
+		if (isShelfPinnedOpen()) return false;
+		const snapshot = opts.shelfManager.getSnapshot();
+		if (snapshot.openCardIdx >= 0) return false;
+		if (isShelfInteractionUiTarget(event.target)) return false;
+		if (!isShelfInteractionBackgroundTarget(event.target)) return false;
+		if (opts.getShelfPresence?.() !== "auto") return false;
+		const viewportWidth = opts.getViewportWidth();
+		const viewportHeight = opts.getViewportHeight();
+		if (isShelfClickZone(event, viewportWidth, viewportHeight, false)) return true;
+		return isSideAutoPreviewActive() && isShelfPreviewUseZone(event, viewportWidth, viewportHeight);
 	};
 
 	const canUseHit = (hit: ReturnType<ShelfPointerRaycastHitGetter>): hit is ShelfRaycastCardHit => {
@@ -203,6 +259,14 @@ export function attachShelfPointerInteractionWiring(
 			const dy = pointerEvent.clientY - pointerDownAt.y;
 			if (Math.hypot(dx, dy) > 6) hadDrag = true;
 		}
+		if (canShowShelfHoverCueAt(pointerEvent)) {
+			opts.shelfManager.updateShelfHoverCueFromPointer({
+				clientX: pointerEvent.clientX,
+				clientY: pointerEvent.clientY,
+			});
+		} else {
+			opts.shelfManager.clearShelfHoverCue();
+		}
 		if (!canStartInteraction(event)) {
 			clearSelection();
 			return;
@@ -232,6 +296,11 @@ export function attachShelfPointerInteractionWiring(
 		pointerDownAt = null;
 		hadDrag = false;
 		suppressNextClick = false;
+		clearHoverCueAndSelection();
+	};
+
+	const onPointerLeave: EventListener = () => {
+		clearHoverCueAndSelection();
 	};
 
 	const onClick: EventListener = (event) => {
@@ -313,6 +382,7 @@ export function attachShelfPointerInteractionWiring(
 	opts.target.addEventListener("pointerdown", onPointerDown);
 	opts.target.addEventListener("pointerup", onPointerUp);
 	opts.target.addEventListener("pointercancel", onPointerCancel);
+	opts.target.addEventListener("pointerleave", onPointerLeave);
 	opts.target.addEventListener("pointermove", onPointerMove);
 	opts.target.addEventListener("click", onClick);
 	opts.target.addEventListener("wheel", onWheel, WHEEL_LISTENER_OPTIONS);
@@ -324,6 +394,7 @@ export function attachShelfPointerInteractionWiring(
 		opts.target.removeEventListener("pointerdown", onPointerDown);
 		opts.target.removeEventListener("pointerup", onPointerUp);
 		opts.target.removeEventListener("pointercancel", onPointerCancel);
+		opts.target.removeEventListener("pointerleave", onPointerLeave);
 		opts.target.removeEventListener("pointermove", onPointerMove);
 		opts.target.removeEventListener("click", onClick);
 		opts.target.removeEventListener("wheel", onWheel, WHEEL_REMOVE_OPTIONS);
