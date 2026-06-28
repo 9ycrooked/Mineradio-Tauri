@@ -27,6 +27,9 @@ export interface BottomControlsHostProps {
 	onPlayQueueIndex?: (index: number) => void;
 	onRemoveQueueIndex?: (index: number) => void;
 	onInsertQueueNext?: (index: number) => void;
+	onMinimize?: () => void;
+	onToggleMaximize?: () => void;
+	onToggleFullscreen?: () => void;
 	mode?: PlaybackMode;
 	isPlaying?: boolean;
 	currentTitle?: string;
@@ -84,6 +87,9 @@ export function BottomControlsHost(props: BottomControlsHostProps): ReactElement
 				onPlayQueueIndex={props.onPlayQueueIndex}
 				onRemoveQueueIndex={props.onRemoveQueueIndex}
 				onInsertQueueNext={props.onInsertQueueNext}
+				onMinimize={props.onMinimize}
+				onToggleMaximize={props.onToggleMaximize}
+				onToggleFullscreen={props.onToggleFullscreen}
 				mode={props.mode}
 				isPlaying={props.isPlaying}
 				currentTitle={props.currentTitle}

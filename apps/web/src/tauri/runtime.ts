@@ -230,9 +230,24 @@ export async function importJsonFile(): Promise<ImportJsonFileResult> {
 	return result ?? cancelledImportJsonResult();
 }
 
+export async function minimizeWindow(): Promise<void> {
+	if (!isTauriRuntime()) return;
+	await invokeTauriCommand("window_minimize");
+}
+
+export async function toggleWindowMaximize(): Promise<void> {
+	if (!isTauriRuntime()) return;
+	await invokeTauriCommand("window_toggle_maximize");
+}
+
 export async function toggleWindowFullscreen(): Promise<void> {
 	if (!isTauriRuntime()) return;
 	await invokeTauriCommand("window_toggle_fullscreen");
+}
+
+export async function closeWindow(): Promise<void> {
+	if (!isTauriRuntime()) return;
+	await invokeTauriCommand("window_close");
 }
 
 export async function openExternalUrl(url: string): Promise<boolean> {

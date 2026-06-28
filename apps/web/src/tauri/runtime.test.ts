@@ -8,9 +8,12 @@ import {
 	importJsonFile,
 	isTauriRuntime,
 	listenGlobalHotkey,
+	closeWindow,
+	minimizeWindow,
 	openExternalUrl,
 	openProviderLoginWindow,
 	showDesktopLyricsWindow,
+	toggleWindowMaximize,
 	toggleWindowFullscreen,
 	updateDesktopLyricsPayload
 } from "./runtime";
@@ -73,6 +76,12 @@ test("global hotkey helpers are inert outside Tauri", async () => {
 
 test("window fullscreen helper is inert outside Tauri", async () => {
 	expect(await toggleWindowFullscreen()).toBe(undefined);
+});
+
+test("window chrome helpers are inert outside Tauri", async () => {
+	expect(await minimizeWindow()).toBe(undefined);
+	expect(await toggleWindowMaximize()).toBe(undefined);
+	expect(await closeWindow()).toBe(undefined);
 });
 
 test("external URL helper is inert outside Tauri", async () => {

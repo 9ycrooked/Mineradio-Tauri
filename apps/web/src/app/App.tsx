@@ -30,8 +30,10 @@ import {
 	getSidecarStatus,
 	importJsonFile,
 	listenGlobalHotkey,
+	minimizeWindow,
 	openProviderLoginWindow,
 	showDesktopLyricsWindow,
+	toggleWindowMaximize,
 	toggleWindowFullscreen,
 	updateDesktopLyricsPayload,
 	type GlobalHotkeyBinding,
@@ -1058,6 +1060,9 @@ export function App({ SplashComponent = SplashHost, VisualComponent = VisualEngi
 				onPlayQueueIndex={playMiniQueueIndex}
 				onRemoveQueueIndex={removeQueueAt}
 				onInsertQueueNext={insertMiniQueueNext}
+				onMinimize={() => void minimizeWindow()}
+				onToggleMaximize={() => void toggleWindowMaximize()}
+				onToggleFullscreen={() => void toggleWindowFullscreen()}
 				mode={playbackMode}
 				isPlaying={isPlaying}
 				currentTitle={currentTrack?.title}
