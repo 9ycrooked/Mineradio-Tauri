@@ -59,7 +59,7 @@
 - Direct dependency allowlist enforcement：`npm run license:check` 会检查 Tauri 迁移目标 workspace manifests 和 `apps/desktop/src-tauri/Cargo.toml` 的直接依赖，要求它们全部进入 Dependency Audit 表且 Decision 不为 `待审核`。该检查不替代 Rust/npm transitive full audit。
 - packaged notices inclusion：`npm run packaged-notices:check` 会静态检查 Tauri bundle resources 已声明 `LICENSE`、`NOTICE.md`、`THIRD_PARTY_NOTICES.md`、`PRIVACY.md`、`SECURITY.md`；公开发布前仍必须验证 Windows 安装包/安装后目录真实包含这些文件及必要第三方 license 文本。
 - release notes wording：真实 GitHub Release notes 必须明确本项目是 GPL-3.0 二开/fork/rewrite，不暗示网易云音乐、QQ 音乐或原 Mineradio 官方身份。
-- updater signature/release artifact relation：必须在 B2/B3 的最终发布路径下明确 Tauri updater manifest、签名字段、公钥配置、安装包资产和 release 上传资产之间的关系；若继续 detection-only，不得展示可安装更新为已通过 gate，且需在 release notes/UI 中说明。
+- updater signature/release artifact relation：`npm run updater-policy:check` 会在 B2 pubkey 为空时静态锁定 detection-only：Tauri updater endpoint 仍指向 `zzstar101/Mineradio`，Rust/web 不暴露 download/install helper，UI 保留 `signature-key-missing` 不可安装文案；公开发布前仍必须在最终发布路径下明确 Tauri updater manifest、签名字段、公钥配置、安装包资产和 release 上传资产之间的关系。若继续 detection-only，不得展示可安装更新为已通过 gate，且需在 release notes/UI 中说明。
 
 ## QQ 开源项目审核表
 

@@ -23,7 +23,8 @@
     "license:check": "node scripts/check-license-allowlist.mjs",
     "packaged-notices:check": "node scripts/check-packaged-notices.mjs",
     "release-csp:check": "node scripts/check-release-csp.mjs",
-    "release-identity:check": "node scripts/check-release-identity.mjs"
+    "release-identity:check": "node scripts/check-release-identity.mjs",
+    "updater-policy:check": "node scripts/check-updater-policy.mjs"
   },
   "build": {
     "appId": "com.mineradio.desktop",
