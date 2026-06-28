@@ -44,13 +44,17 @@
 
 ## Task 1: Tauri Updater
 
-- [ ] **Step 1: Choose manifest mode**
+P10.a code-side status: updater detection wiring is complete, but install/download is still blocked by the signature/public-key gate. No Windows install/update/uninstall gate is closed.
+
+- [x] **Step 1: Choose manifest mode**
 
 Use static JSON first for local testing unless a dynamic server is already available.
 
 - [ ] **Step 2: Configure updater**
 
 Configure Tauri updater endpoint, public key/signing as required by selected updater mode.
+
+Code-side endpoint is configured in `apps/desktop/src-tauri/tauri.conf.json` as `https://github.com/zzstar101/Mineradio/releases/latest/download/latest.json`; `pubkey` remains empty, so signed download/install is not complete.
 
 - [ ] **Step 3: React update UI**
 
@@ -62,23 +66,31 @@ React shows:
 - error.
 - restart required.
 
+P10.a only added typed updater helpers and a Zustand status reducer. The full user-facing update UI and download/install/restart flow remain pending.
+
 - [ ] **Step 4: Verify local update**
 
 Build lower version and higher version, point manifest to higher version, test detection and update path.
 
 ## Task 2: Release Identity
 
-- [ ] **Step 1: New app id**
+- [x] **Step 1: New app id**
 
 Confirm app id does not reuse `com.mineradio.desktop`.
+
+P10.b static evidence: Tauri identifier is `com.mineradio.fork.tauri`; old Electron `package.json` still has `com.mineradio.desktop` only for the retained Electron baseline.
 
 - [ ] **Step 2: New app name**
 
 If public distribution is planned, README and release notes must identify the project as a fork.
 
+P10.b code-side docs: README and NOTICE identify the Tauri mainline as a GPL-3.0 fork/rewrite and state that public release is not complete. This step remains open until real GitHub release notes identify the project as a fork.
+
 - [ ] **Step 3: Data directory**
 
 Confirm Tauri app data directory does not read old Mineradio user directory by default.
+
+P10.b static docs note the new data-directory policy and no old-user-data migration promise. Manual Windows app-data verification remains pending.
 
 ## Task 3: License Audit
 
@@ -104,7 +116,7 @@ Confirm no member-only or closed plugin is bundled.
 
 ## Task 4: Notices
 
-- [ ] **Step 1: Create `THIRD_PARTY_NOTICES.md`**
+- [x] **Step 1: Create `THIRD_PARTY_NOTICES.md`**
 
 List:
 
@@ -120,9 +132,11 @@ List:
 - GSAP.
 - QQ reference projects if used.
 
-- [ ] **Step 2: Update README and NOTICE**
+- [x] **Step 2: Update README and NOTICE**
 
 State fork status and license.
+
+P10.b code-side done: README, NOTICE, and `THIRD_PARTY_NOTICES.md` updated. Manual gate remains: package artifacts must include notices, release notes must be written, and unresolved license rows must be closed before public release.
 
 ## Task 5: Final Gates
 

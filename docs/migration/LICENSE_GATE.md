@@ -1,6 +1,6 @@
 # License Gate
 
-更新时间：2026-06-27
+更新时间：2026-06-28
 
 本项目是 GPL-3.0 二开项目。Tauri 版公开分发前必须通过本 gate。
 
@@ -38,14 +38,14 @@
 ## Release Checklist
 
 - [ ] 新项目根 license 为 GPL-3.0。
-- [ ] README 明确二开/fork 来源和修改状态。
-- [ ] NOTICE 或 THIRD_PARTY_NOTICES 列出所有第三方依赖。
+- [x] README 明确二开/fork 来源和修改状态。  — P10.b 已将 README 改为 Tauri 二开迁移主线说明，明确 `zzstar101/Mineradio` 新仓库/updater channel、旧 Electron baseline 仅作参考、不承诺旧用户数据迁移、公开发布前 gate 未完成。
+- [ ] NOTICE 或 THIRD_PARTY_NOTICES 列出所有第三方依赖。  — P10.b 已更新 NOTICE 并新增 `THIRD_PARTY_NOTICES.md`，覆盖当前直接 manifest 依赖/关键技术及 gate 状态；仍需补齐 transitive/Rust crates 全量审核、Three.js/GSAP 最终核验和打包包含验证后再勾选。
 - [ ] Tauri/Rust crates license 已检查。
 - [ ] Bun/npm dependencies license 已检查。
 - [ ] NeteaseCloudMusicApi license 已记录。
 - [ ] Three.js license 已记录。
 - [ ] GSAP 使用范围已确认不含会员/闭源插件。
-- [ ] QQ provider 参考项目 license 审核完成。
+- [x] QQ provider 参考项目 license 审核完成。  — DECISIONS.md A6 已锁 `jsososo/QQMusicApi` / npm `qq-music-api` 为 GPL-3.0 可接入；`sansenjian/qq-music-api` 因 README 非商业附加条款与 GPL-3.0 冲突不接入。
 - [ ] 打包产物包含必要 license/notice 文件。
 - [ ] Release notes 不暗示本项目是网易云、QQ 音乐或原 Mineradio 官方版本。
 
@@ -61,22 +61,33 @@
 | Dependency | Ecosystem | License | Purpose | Distribution Risk | Decision |
 | --- | --- | --- | --- | --- | --- |
 | Tauri 2 | Rust (crate) | MIT/Apache-2.0 | 桌面壳 + updater + window/sidecar 能力 | 待审（Rust crate license 待逐个核对） | 待审核 |
+| @tauri-apps/cli | npm devDependency | MIT/Apache-2.0 | Tauri dev/build CLI | 兼容；安装包包含 notices 仍需验证 | 通过 |
+| tauri-build | Rust build-dependency | MIT/Apache-2.0 | Tauri build script integration | 待随 Rust crates 全量 audit 复核 | 待审核 |
 | Bun | Runtime | MIT | sidecar runtime/workspace | MIT 兼容 | 通过 |
 | Vite | npm | MIT | 前端构建 | MIT 兼容 | 通过 |
+| @vitejs/plugin-react | npm | MIT | Vite React transform / Fast Refresh integration | MIT 兼容 | 通过 |
 | React | npm | MIT | UI | MIT 兼容 | 通过 |
+| React DOM | npm | MIT | UI renderer | MIT 兼容 | 通过 |
+| @types/react | npm devDependency | MIT | React TypeScript types | MIT 兼容 | 通过 |
+| @types/react-dom | npm devDependency | MIT | React DOM TypeScript types | MIT 兼容 | 通过 |
 | Zustand | npm | MIT | 状态管理 | MIT 兼容 | 通过 |
 | zod | npm | MIT | schema validation | MIT 兼容 | 通过 |
 | @tauri-apps/api | npm | MIT/Apache-2.0 | Tauri 前端 IPC | 兼容 | 通过 |
+| TypeScript | npm devDependency | Apache-2.0 | typecheck/build tooling | Apache-2.0 兼容 | 通过 |
 | tauri-plugin-dialog | Rust (crate) | MIT/Apache-2.0 | Rust-owned JSON import/export open/save dialogs | 兼容 | 通过 |
 | tauri-plugin-updater 2.10.0 | Rust (crate) | MIT/Apache-2.0 | Tauri updater 检测和签名校验通道；P10.a 只启用 check，download/install 仍受签名 gate 阻挡 | 兼容；公开安装更新仍需 pubkey/signature 或最终风险决策 | 通过（检测接入） |
 | tauri-plugin-fs | Rust (crate, transitive via tauri-plugin-dialog) | MIT/Apache-2.0 | dialog FilePath conversion / scoped filesystem support | 兼容 | 通过（transitive） |
 | rfd | Rust (crate, transitive via tauri-plugin-dialog) | MIT | native file dialog backend | 兼容 | 通过（transitive） |
+| serde | Rust (crate) | MIT/Apache-2.0 | Rust command/config serialization | 待随 Rust crates 全量 audit 复核 | 待审核 |
+| serde_json | Rust (crate) | MIT/Apache-2.0 | Rust JSON command payloads and config helpers | 待随 Rust crates 全量 audit 复核 | 待审核 |
 | dirs (crate) | Rust (crate) | MIT | app data/log 路径解析 | MIT 兼容 | 通过 |
 | time 0.3 | Rust (crate) | MIT/Apache-2.0 | 格式化 Tauri updater `OffsetDateTime` 为 RFC3339 状态字段 | 兼容 | 通过 |
 | hana-music-api | npm | MIT | Netease provider（主用） | MIT 兼容；极新 2 stars/v1.1.1，parity 风险见 DECISIONS.md A8 | 通过（带 parity 风险） |
 | NeteaseCloudMusicApi | npm | ISC | Netease provider（回退） | ISC 兼容；维护人历史有争议 | 通过（回退路径保留） |
 | Three.js | npm/vendor | MIT | 3D/WebGL | MIT 兼容 | 待审核（引入时再核） |
-| GSAP | npm/vendor | 标准功能 MIT/合规模型 | animation | 会员/闭源插件禁用 | 待审核（仅用标准功能） |
+| @types/three | npm devDependency | MIT | Three.js TypeScript types | MIT 兼容 | 通过 |
+| GSAP | npm/vendor | 标准 no-fee license / 使用范围待核 | animation | Club/member/闭源插件禁用；需确认打包仅含可分发标准能力 | 待审核（仅用标准功能） |
+| happy-dom | npm devDependency | MIT | visual-engine DOM-like test environment | MIT 兼容 | 通过 |
 | jsososo/qq-music-api（npm `qq-music-api`） | npm | GPL-3.0 | QQ provider | 与本项目同 GPL-3.0，组合作品可分发 | 通过 |
 | axios ^0.21.2 | npm [transitive via qq-music-api] | MIT | HTTP 客户端 | MIT 兼容 | 通过（transitive） |
 | cheerio ^1.0.0-rc.3 | npm [transitive via qq-music-api] | MIT | HTML 解析 | MIT 兼容 | 通过（transitive） |
