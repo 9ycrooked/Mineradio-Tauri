@@ -348,3 +348,31 @@ test("songUrl 500 throws SidecarClientError", async () => {
 		expect((caught as SidecarClientError).code).toBe("HTTP_500");
 	});
 });
+
+test("request preserves provider failure envelope on non-2xx response", async () => {
+	const fake = (async () =>
+		jsonResponse({
+			ok: false,
+			error: {
+				code: "LOGIN_REQUIRED",
+				message: "需要登录后播放",
+				provider: "qq",
+				retryable: true,
+				action: "login",
+			},
+		}, 401)) as typeof fetch;
+	await withFetch(fake, async () => {
+		const client = new SidecarClient(BASE);
+		let caught: unknown = null;
+		try {
+			await client.resolveSongUrl({ ...SAMPLE_TRACK, provider: "qq" });
+		} catch (e) {
+			caught = e;
+		}
+		expect(caught instanceof SidecarClientError).toBe(true);
+		expect((caught as SidecarClientError).code).toBe("LOGIN_REQUIRED");
+		expect((caught as SidecarClientError).provider).toBe("qq");
+		expect((caught as SidecarClientError).retryable).toBe(true);
+		expect((caught as SidecarClientError).action).toBe("login");
+	});
+});

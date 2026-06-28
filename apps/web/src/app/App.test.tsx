@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import React from "react";
-import { App, isHomeBlankDismissElement } from "./App";
+import { App, isHomeBlankDismissElement, shouldShowEmptyHome } from "./App";
 
 test("App keeps the empty-home music page mounted behind the splash gate", () => {
 	const html = renderToStaticMarkup(React.createElement(App));
@@ -32,4 +32,26 @@ test("Home blank dismiss accepts only empty Home surfaces", async () => {
 	expect(isHomeBlankDismissElement(document.getElementById("card"))).toBe(false);
 	expect(isHomeBlankDismissElement(document.getElementById("search-input"))).toBe(false);
 	expect(isHomeBlankDismissElement(document.getElementById("bottom-handle"))).toBe(false);
+});
+
+test("shouldShowEmptyHome follows baseline force/suppress/playback gates", () => {
+	const base = {
+		splashActive: false,
+		homeForcedOpen: false,
+		homeSuppressed: false,
+		hasCurrentTrack: false,
+		queueLength: 0,
+		isPlaying: false,
+	};
+	expect(shouldShowEmptyHome(base)).toBe(true);
+	expect(shouldShowEmptyHome({ ...base, splashActive: true })).toBe(false);
+	expect(shouldShowEmptyHome({ ...base, homeSuppressed: true })).toBe(false);
+	expect(shouldShowEmptyHome({ ...base, hasCurrentTrack: true })).toBe(false);
+	expect(shouldShowEmptyHome({ ...base, queueLength: 1 })).toBe(false);
+	expect(shouldShowEmptyHome({ ...base, isPlaying: true })).toBe(false);
+	expect(shouldShowEmptyHome({ ...base, immersiveActive: true })).toBe(false);
+	expect(shouldShowEmptyHome({ ...base, shelfDetailOpen: true })).toBe(false);
+	expect(shouldShowEmptyHome({ ...base, shelfPinnedOpen: true })).toBe(false);
+	expect(shouldShowEmptyHome({ ...base, splashActive: true, homeForcedOpen: true })).toBe(false);
+	expect(shouldShowEmptyHome({ ...base, hasCurrentTrack: true, homeForcedOpen: true })).toBe(true);
 });

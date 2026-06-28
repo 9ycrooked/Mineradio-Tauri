@@ -37,6 +37,10 @@ test("setCurrentTrack sets the track and toggles play", () => {
 	const store = usePlaybackStore.getState();
 	store.setCurrentTrack(makeTrack("a"));
 	expect(usePlaybackStore.getState().currentTrack?.id).toBe("a");
+	store.setPlaying(true);
+	expect(usePlaybackStore.getState().isPlaying).toBe(true);
+	store.setPlaying(false);
+	expect(usePlaybackStore.getState().isPlaying).toBe(false);
 	store.togglePlay();
 	expect(usePlaybackStore.getState().isPlaying).toBe(true);
 });

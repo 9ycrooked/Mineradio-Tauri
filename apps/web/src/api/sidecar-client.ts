@@ -28,12 +28,14 @@ export interface SidecarClientErrorInit {
 	message: string;
 	provider?: string;
 	retryable: boolean;
+	action?: string;
 }
 
 export class SidecarClientError extends Error {
 	readonly code: string;
 	readonly provider?: string;
 	readonly retryable: boolean;
+	readonly action?: string;
 
 	constructor(init: SidecarClientErrorInit) {
 		super(init.message);
@@ -41,12 +43,33 @@ export class SidecarClientError extends Error {
 		this.code = init.code;
 		this.provider = init.provider;
 		this.retryable = init.retryable;
+		this.action = init.action;
 	}
 }
 
 const CapabilitySuccessEnvelopeSchema = ApiSuccessSchema(CapabilityMatrixSchema);
 
 type FetchImpl = typeof fetch;
+
+async function readJsonSafely(res: Response): Promise<unknown | null> {
+	try {
+		return await res.json() as unknown;
+	} catch {
+		return null;
+	}
+}
+
+function throwFailureEnvelope(json: unknown): never | void {
+	const failure = ApiFailureSchema.safeParse(json);
+	if (!failure.success) return;
+	throw new SidecarClientError({
+		code: failure.data.error.code,
+		message: failure.data.error.message,
+		provider: failure.data.error.provider,
+		retryable: failure.data.error.retryable,
+		action: failure.data.error.action,
+	});
+}
 
 export class SidecarClient {
 	private readonly baseUrl: string;
@@ -59,21 +82,13 @@ export class SidecarClient {
 
 	async health(): Promise<HealthResponse> {
 		const res = await this.fetchImpl(`${this.baseUrl}/health`);
+		const json = await readJsonSafely(res);
+		throwFailureEnvelope(json);
 		if (!res.ok) {
 			throw new SidecarClientError({
 				code: `HTTP_${res.status}`,
 				message: `health request failed with status ${res.status}`,
 				retryable: res.status >= 500 || res.status === 429,
-			});
-		}
-		const json = (await res.json()) as unknown;
-		const failure = ApiFailureSchema.safeParse(json);
-		if (failure.success) {
-			throw new SidecarClientError({
-				code: failure.data.error.code,
-				message: failure.data.error.message,
-				provider: failure.data.error.provider,
-				retryable: failure.data.error.retryable,
 			});
 		}
 		const parsed = HealthResponseSchema.safeParse(json);
@@ -89,21 +104,13 @@ export class SidecarClient {
 
 	async capabilities(): Promise<CapabilityMatrix> {
 		const res = await this.fetchImpl(`${this.baseUrl}/providers/capabilities`);
+		const json = await readJsonSafely(res);
+		throwFailureEnvelope(json);
 		if (!res.ok) {
 			throw new SidecarClientError({
 				code: `HTTP_${res.status}`,
 				message: `capabilities request failed with status ${res.status}`,
 				retryable: res.status >= 500 || res.status === 429,
-			});
-		}
-		const json = (await res.json()) as unknown;
-		const failure = ApiFailureSchema.safeParse(json);
-		if (failure.success) {
-			throw new SidecarClientError({
-				code: failure.data.error.code,
-				message: failure.data.error.message,
-				provider: failure.data.error.provider,
-				retryable: failure.data.error.retryable,
 			});
 		}
 		const envelope = CapabilitySuccessEnvelopeSchema.safeParse(json);
@@ -131,21 +138,13 @@ export class SidecarClient {
 				}
 			: { method };
 		const res = await this.fetchImpl(`${this.baseUrl}${path}`, init);
+		const json = await readJsonSafely(res);
+		throwFailureEnvelope(json);
 		if (!res.ok) {
 			throw new SidecarClientError({
 				code: `HTTP_${res.status}`,
 				message: `${method} ${path} failed with status ${res.status}`,
 				retryable: res.status >= 500 || res.status === 429,
-			});
-		}
-		const json = (await res.json()) as unknown;
-		const failure = ApiFailureSchema.safeParse(json);
-		if (failure.success) {
-			throw new SidecarClientError({
-				code: failure.data.error.code,
-				message: failure.data.error.message,
-				provider: failure.data.error.provider,
-				retryable: failure.data.error.retryable,
 			});
 		}
 		const envelope = ApiSuccessSchema(schema).safeParse(json);

@@ -13,6 +13,7 @@ export interface PlaybackState {
 	mode: PlaybackMode;
 	queue: Track[];
 	setCurrentTrack: (track: Track | null) => void;
+	setPlaying: (playing: boolean) => void;
 	togglePlay: () => void;
 	setPosition: (ms: number) => void;
 	setDuration: (ms: number | null) => void;
@@ -39,6 +40,7 @@ export function trackRef(track: Track | null): string {
 function playbackPatchForTrack(track: Track | null) {
 	return {
 		currentTrack: track,
+		isPlaying: track ? true : false,
 		positionMs: 0,
 		durationMs: track?.durationMs ?? null,
 	};
@@ -78,6 +80,7 @@ export const usePlaybackStore = create<PlaybackState>()((set, get) => ({
 		set({
 			...playbackPatchForTrack(track),
 		}),
+	setPlaying: (playing) => set({ isPlaying: playing }),
 	togglePlay: () => set((s) => ({ isPlaying: !s.isPlaying })),
 	setPosition: (ms) => set({ positionMs: ms }),
 	setDuration: (ms) => set({ durationMs: ms }),

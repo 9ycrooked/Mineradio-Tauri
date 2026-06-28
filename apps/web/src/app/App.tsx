@@ -56,6 +56,31 @@ export function isHomeBlankDismissElement(target: EventTarget | null): boolean {
 	].join(","));
 }
 
+export interface EmptyHomeStateInput {
+	splashActive: boolean;
+	homeForcedOpen: boolean;
+	homeSuppressed: boolean;
+	hasCurrentTrack: boolean;
+	queueLength: number;
+	isPlaying: boolean;
+	immersiveActive?: boolean;
+	shelfDetailOpen?: boolean;
+	shelfPinnedOpen?: boolean;
+}
+
+export function shouldShowEmptyHome(input: EmptyHomeStateInput): boolean {
+	if (input.splashActive) return false;
+	if (input.homeForcedOpen) return true;
+	if (input.homeSuppressed) return false;
+	if (input.immersiveActive) return false;
+	if (input.shelfDetailOpen) return false;
+	if (input.shelfPinnedOpen) return false;
+	if (input.hasCurrentTrack) return false;
+	if (input.queueLength > 0) return false;
+	if (input.isPlaying) return false;
+	return true;
+}
+
 export function App(): ReactElement {
 	const [sidecarClient, setSidecarClient] = useState<SidecarClient | null>(null);
 	const [splashActive, setSplashActive] = useState<boolean>(SHOW_SPLASH);
@@ -90,6 +115,7 @@ export function App(): ReactElement {
 	const lyricsReset = useLyricsStore((s) => s.reset);
 
 	const togglePlay = usePlaybackStore((s) => s.togglePlay);
+	const setPlaying = usePlaybackStore((s) => s.setPlaying);
 	const setPositionMs = usePlaybackStore((s) => s.setPosition);
 	const setDurationMs = usePlaybackStore((s) => s.setDuration);
 	const setVolume = usePlaybackStore((s) => s.setVolume);
@@ -108,6 +134,7 @@ export function App(): ReactElement {
 	const audioRef = useRef<HTMLAudioElement | null>(null);
 	const controllerRef = useRef<PlayerController | null>(null);
 	const lastLoadedKeyRef = useRef<string>("");
+	const playbackRequestSeqRef = useRef(0);
 	const neteaseCookieInputRef = useRef<HTMLTextAreaElement | null>(null);
 	const qqCookieInputRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -122,8 +149,22 @@ export function App(): ReactElement {
 		return client;
 	}, []);
 
-	const emptyHomeCoreAllowed = !currentTrack && queue.length === 0 && !isPlaying;
-	const emptyHomeActive = !splashActive && (homeForcedOpen || (!homeSuppressed && emptyHomeCoreAllowed));
+	const emptyHomeCoreAllowed = shouldShowEmptyHome({
+		splashActive: false,
+		homeForcedOpen: false,
+		homeSuppressed: false,
+		hasCurrentTrack: !!currentTrack,
+		queueLength: queue.length,
+		isPlaying,
+	});
+	const emptyHomeActive = shouldShowEmptyHome({
+		splashActive,
+		homeForcedOpen,
+		homeSuppressed,
+		hasCurrentTrack: !!currentTrack,
+		queueLength: queue.length,
+		isPlaying,
+	});
 	const homeControlsLocked = emptyHomeActive && homeForcedOpen && !consoleVisible && emptyHomeCoreAllowed;
 
 	const revealConsole = useCallback(() => {
@@ -139,6 +180,7 @@ export function App(): ReactElement {
 	}, []);
 
 	const searchQuery = useCallback((query: string) => {
+		setHomeSuppressed(false);
 		setSearchKeyword(query);
 		focusSearch();
 	}, [focusSearch, setSearchKeyword]);
@@ -152,6 +194,13 @@ export function App(): ReactElement {
 	const showNotice = useCallback((message: string) => {
 		showToast(message);
 	}, [showToast]);
+
+	const enterPlaybackSurface = useCallback(() => {
+		setHomeForcedOpen(false);
+		setHomeSuppressed(true);
+		setConsole(true);
+		setMiniQueue(false);
+	}, [setConsole, setMiniQueue]);
 
 	const goHome = useCallback(() => {
 		if (homeForcedOpen || emptyHomeActive) {
@@ -440,10 +489,10 @@ export function App(): ReactElement {
 			}
 		});
 		controller.on("play", () => {
-			if (!usePlaybackStore.getState().isPlaying) togglePlay();
+			setPlaying(true);
 		});
 		controller.on("pause", () => {
-			if (usePlaybackStore.getState().isPlaying) togglePlay();
+			setPlaying(false);
 		});
 		controller.on("ended", () => {
 			setPositionMs(0);
@@ -454,13 +503,16 @@ export function App(): ReactElement {
 			}
 		});
 		controller.on("error", (payload) => {
-			console.warn("audio playback failed", { code: `AUDIO_${payload.code}`, message: payload.message });
+			const message = payload.message || "音频播放失败";
+			setSearchError(message);
+			showToast(message);
+			console.warn("audio playback failed", { code: `AUDIO_${payload.code}`, message });
 		});
 		return () => {
 			controllerRef.current = null;
 			audioRef.current = null;
 		};
-	}, [setDurationMs, setLyricsIndex, setPositionMs, togglePlay]);
+	}, [setDurationMs, setLyricsIndex, setPlaying, setPositionMs, setSearchError, showToast]);
 
 	useEffect(() => {
 		const controller = controllerRef.current;
@@ -468,6 +520,7 @@ export function App(): ReactElement {
 		if (!controller || !client) return;
 		if (!currentTrack) {
 			lastLoadedKeyRef.current = "";
+			playbackRequestSeqRef.current += 1;
 			controller.pause();
 			lyricsReset();
 			return;
@@ -475,28 +528,40 @@ export function App(): ReactElement {
 		const key = `${currentTrack.provider}:${currentTrack.id}`;
 		if (key === lastLoadedKeyRef.current) return;
 		lastLoadedKeyRef.current = key;
+		const seq = playbackRequestSeqRef.current + 1;
+		playbackRequestSeqRef.current = seq;
 
 		void (async () => {
 			try {
 				const result = await client.resolveSongUrl(currentTrack);
+				if (playbackRequestSeqRef.current !== seq) return;
 				const audioUrl = result.proxied ? result.url : client.audioProxyUrl(result.url);
 				controller.load(audioUrl);
 				await controller.play();
+				if (playbackRequestSeqRef.current !== seq) return;
+				setHomeForcedOpen(false);
+				setHomeSuppressed(true);
 			} catch (e) {
+				if (playbackRequestSeqRef.current !== seq) return;
 				const code = e instanceof SidecarClientError ? e.code : "AUDIO_UNKNOWN";
 				const message = e instanceof Error ? e.message : "playback error";
+				setPlaying(false);
+				setSearchError(message);
+				showToast(message);
 				console.warn("playback load failed", { code, message });
 			}
 			try {
 				setLyricsLoading(true);
 				const lyric = await client.lyric(currentTrack);
+				if (playbackRequestSeqRef.current !== seq) return;
 				setLyricsPayload(lyric);
 			} catch (e) {
+				if (playbackRequestSeqRef.current !== seq) return;
 				const message = e instanceof Error ? e.message : "lyrics failed";
 				setLyricsError(message);
 			}
 		})();
-	}, [currentTrack, sidecarClient, setLyricsError, setLyricsLoading, setLyricsPayload, lyricsReset]);
+	}, [currentTrack, sidecarClient, setLyricsError, setLyricsLoading, setLyricsPayload, setPlaying, setSearchError, showToast, lyricsReset]);
 
 	return (
 		<>
@@ -537,7 +602,7 @@ export function App(): ReactElement {
 					showToast("视觉引导已打开播放器控制台，播放后会进入粒子与歌词舞台");
 				}}
 			/>
-			<SearchShell client={sidecarClient} onFocus={focusSearch} onUpload={() => void importLocalJson()} />
+			<SearchShell client={sidecarClient} onFocus={focusSearch} onUpload={() => void importLocalJson()} onResultPlay={enterPlaybackSurface} />
 			<TopRightControls
 				onHome={goHome}
 				onLogin={openLoginModal}

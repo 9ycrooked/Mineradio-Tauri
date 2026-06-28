@@ -10,6 +10,7 @@ export interface SearchShellProps {
 	client: SidecarClient | null;
 	onFocus?: () => void;
 	onUpload?: () => void;
+	onResultPlay?: (track: Track) => void;
 }
 
 const HISTORY_CHIPS: Array<{ label: string; mode?: SearchMode; keyword: string }> = [
@@ -32,7 +33,35 @@ function trackArtists(track: Track): string {
 	return track.artists.length > 0 ? track.artists.join(" / ") : "未知艺人";
 }
 
-export function SearchShell({ client, onFocus, onUpload }: SearchShellProps): ReactElement {
+export async function searchTracksForMode(
+	client: Pick<SidecarClient, "search" | "searchAll">,
+	mode: SearchMode,
+	keyword: string,
+	limit: number,
+): Promise<Track[]> {
+	const providerFilter = modeProvider(mode);
+	return providerFilter
+		? client.search(providerFilter, keyword, limit)
+		: client.searchAll(keyword, limit);
+}
+
+export function clearSearchAfterPlayback(
+	ops: {
+		nextSearchSeq: () => void;
+		setLoading: (loading: boolean) => void;
+		setKeyword: (keyword: string) => void;
+		setResults: (results: Track[]) => void;
+		setError: (error: string | null) => void;
+	},
+): void {
+	ops.nextSearchSeq();
+	ops.setLoading(false);
+	ops.setKeyword("");
+	ops.setResults([]);
+	ops.setError(null);
+}
+
+export function SearchShell({ client, onFocus, onUpload, onResultPlay }: SearchShellProps): ReactElement {
 	const provider = useSearchStore((s) => s.provider);
 	const keyword = useSearchStore((s) => s.keyword);
 	const results = useSearchStore((s) => s.results);
@@ -68,10 +97,7 @@ export function SearchShell({ client, onFocus, onUpload }: SearchShellProps): Re
 			setLoading(true);
 			setError(null);
 			try {
-				const providerFilter = modeProvider(nextMode);
-				const tracks = providerFilter
-					? await client.search(providerFilter, trimmed, 30)
-					: await client.searchAll(trimmed, 30);
+				const tracks = await searchTracksForMode(client, nextMode, trimmed, 30);
 				if (searchSeqRef.current === seq) setResults(tracks);
 			} catch (e) {
 				if (searchSeqRef.current !== seq) return;
@@ -104,6 +130,20 @@ export function SearchShell({ client, onFocus, onUpload }: SearchShellProps): Re
 
 	const submit = () => {
 		void runSearch(keyword, modeRef.current);
+	};
+
+	const playResult = (track: Track) => {
+		playSearchResult(track);
+		clearSearchAfterPlayback({
+			nextSearchSeq: () => {
+				searchSeqRef.current += 1;
+			},
+			setLoading,
+			setKeyword,
+			setResults,
+			setError,
+		});
+		onResultPlay?.(track);
 	};
 
 	const onInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -184,7 +224,7 @@ export function SearchShell({ client, onFocus, onUpload }: SearchShellProps): Re
 											className="search-shell-row-btn"
 											disabled={disabled}
 											onClick={() => {
-												if (!disabled) playSearchResult(track);
+												if (!disabled) playResult(track);
 											}}
 										>
 											<span className="search-shell-cover" style={track.coverUrl ? { backgroundImage: `url("${track.coverUrl}")` } : undefined} />
