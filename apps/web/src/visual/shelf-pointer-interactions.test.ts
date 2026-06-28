@@ -20,11 +20,15 @@ function closedSnapshot() {
 
 class FakePointerTarget {
 	listeners = new Map<string, Set<(event: unknown) => void>>();
+	options = new Map<string, unknown[]>();
 
-	addEventListener(type: string, listener: EventListener): void {
+	addEventListener(type: string, listener: EventListener, options?: unknown): void {
 		const set = this.listeners.get(type) ?? new Set<(event: unknown) => void>();
 		set.add(listener as unknown as (event: unknown) => void);
 		this.listeners.set(type, set);
+		const optionList = this.options.get(type) ?? [];
+		optionList.push(options);
+		this.options.set(type, optionList);
 	}
 
 	removeEventListener(type: string, listener: EventListener): void {
@@ -34,6 +38,26 @@ class FakePointerTarget {
 	emit(type: string, event: unknown): void {
 		for (const listener of this.listeners.get(type) ?? []) listener(event);
 	}
+}
+
+function makeWheelEvent(opts: {
+	deltaY: number;
+	shiftKey?: boolean;
+	target?: unknown;
+	clientX?: number;
+	clientY?: number;
+}) {
+	const calls: string[] = [];
+	return {
+		clientX: opts.clientX ?? 10,
+		clientY: opts.clientY ?? 20,
+		deltaY: opts.deltaY,
+		shiftKey: opts.shiftKey ?? false,
+		target: opts.target ?? null,
+		preventDefault: () => calls.push("preventDefault"),
+		stopImmediatePropagation: () => calls.push("stopImmediatePropagation"),
+		calls,
+	};
 }
 
 function makeHit(index: number, action: unknown = { kind: "playQueue", index }): ShelfRaycastCardHit {
@@ -441,4 +465,309 @@ test("attachShelfPointerInteractionWiring scrolls non-centered clicks and opens 
 	expect(focus).toEqual([
 		["shelf-detail", { immediate: true, portrait: true, wallpaperSafe: false }],
 	]);
+});
+
+test("attachShelfPointerInteractionWiring scrolls stage card-hit wheel in delta direction and consumes event", () => {
+	const target = new FakePointerTarget();
+	const scrolled: number[] = [];
+	const cleanup = attachShelfPointerInteractionWiring({
+		target,
+		shelfManager: {
+			getMode: () => "stage",
+			getSnapshot: closedSnapshot,
+			setSelectedIdx: () => {},
+			clearSelected: () => {},
+			getCenterIdx: () => 0,
+			scrollBy: (delta) => scrolled.push(delta),
+			openDetail: () => {},
+		},
+		cinema: { setFocusZone: () => {} },
+		getHit: () => makeHit(2),
+		getSplashActive: () => false,
+		getPortrait: () => false,
+		getWallpaperSafe: () => false,
+		getViewportWidth: () => 1200,
+		getViewportHeight: () => 900,
+	});
+
+	const down = makeWheelEvent({ deltaY: 120 });
+	const up = makeWheelEvent({ deltaY: -80 });
+	target.emit("wheel", down);
+	target.emit("wheel", up);
+	cleanup();
+
+	expect(scrolled).toEqual([1, -1]);
+	expect(down.calls).toEqual(["preventDefault", "stopImmediatePropagation"]);
+	expect(up.calls).toEqual(["preventDefault", "stopImmediatePropagation"]);
+	expect(target.options.get("wheel")).toEqual([{ passive: false, capture: true }]);
+});
+
+test("attachShelfPointerInteractionWiring ignores stage wheel without hit unless shift forces shelf scroll", () => {
+	const target = new FakePointerTarget();
+	const scrolled: number[] = [];
+	const cleanup = attachShelfPointerInteractionWiring({
+		target,
+		shelfManager: {
+			getMode: () => "stage",
+			getSnapshot: closedSnapshot,
+			setSelectedIdx: () => {},
+			clearSelected: () => {},
+			getCenterIdx: () => 0,
+			scrollBy: (delta) => scrolled.push(delta),
+			openDetail: () => {},
+		},
+		cinema: { setFocusZone: () => {} },
+		getHit: () => null,
+		getSplashActive: () => false,
+		getPortrait: () => false,
+		getWallpaperSafe: () => false,
+		getViewportWidth: () => 1200,
+		getViewportHeight: () => 900,
+	});
+
+	const normal = makeWheelEvent({ deltaY: 120 });
+	const forced = makeWheelEvent({ deltaY: -120, shiftKey: true });
+	target.emit("wheel", normal);
+	target.emit("wheel", forced);
+	cleanup();
+
+	expect(scrolled).toEqual([-1]);
+	expect(normal.calls).toEqual([]);
+	expect(forced.calls).toEqual(["preventDefault", "stopImmediatePropagation"]);
+});
+
+test("attachShelfPointerInteractionWiring lets stage shift wheel force scroll even when shelf visibility is low", () => {
+	const target = new FakePointerTarget();
+	const scrolled: number[] = [];
+	const cleanup = attachShelfPointerInteractionWiring({
+		target,
+		shelfManager: {
+			getMode: () => "stage",
+			getSnapshot: () => ({
+				...closedSnapshot(),
+				shelfVisibility: 0.02,
+			}),
+			setSelectedIdx: () => {},
+			clearSelected: () => {},
+			getCenterIdx: () => 0,
+			scrollBy: (delta) => scrolled.push(delta),
+			openDetail: () => {},
+		},
+		cinema: { setFocusZone: () => {} },
+		getHit: () => null,
+		getSplashActive: () => false,
+		getPortrait: () => false,
+		getWallpaperSafe: () => false,
+		getViewportWidth: () => 1200,
+		getViewportHeight: () => 900,
+	});
+
+	const forced = makeWheelEvent({ deltaY: 120, shiftKey: true });
+	target.emit("wheel", forced);
+	cleanup();
+
+	expect(scrolled).toEqual([1]);
+	expect(forced.calls).toEqual(["preventDefault", "stopImmediatePropagation"]);
+});
+
+test("attachShelfPointerInteractionWiring uses side always-visible 18px pad and scrolls wheel over card hit", () => {
+	const target = new FakePointerTarget();
+	const pads: Array<number | undefined> = [];
+	const scrolled: number[] = [];
+	const cleanup = attachShelfPointerInteractionWiring({
+		target,
+		shelfManager: {
+			getMode: () => "side",
+			getSnapshot: () => ({
+				...closedSnapshot(),
+				mode: "side" as const,
+				shelfVisibility: 0.9,
+			}),
+			setSelectedIdx: () => {},
+			clearSelected: () => {},
+			getCenterIdx: () => 0,
+			scrollBy: (delta) => scrolled.push(delta),
+			openDetail: () => {},
+		},
+		cinema: { setFocusZone: () => {} },
+		getHit: (pointer) => {
+			pads.push(pointer.screenPad);
+			return makeHit(2);
+		},
+		getSplashActive: () => false,
+		getPortrait: () => false,
+		getWallpaperSafe: () => false,
+		getViewportWidth: () => 1200,
+		getViewportHeight: () => 900,
+		getShelfPresence: () => "always",
+	});
+
+	const event = makeWheelEvent({ deltaY: 120 });
+	target.emit("wheel", event);
+	cleanup();
+
+	expect(pads).toEqual([18]);
+	expect(scrolled).toEqual([1]);
+	expect(event.calls).toEqual(["preventDefault", "stopImmediatePropagation"]);
+});
+
+test("attachShelfPointerInteractionWiring lets side always shift wheel force scroll even when shelf visibility is low", () => {
+	const target = new FakePointerTarget();
+	const scrolled: number[] = [];
+	const cleanup = attachShelfPointerInteractionWiring({
+		target,
+		shelfManager: {
+			getMode: () => "side",
+			getSnapshot: () => ({
+				...closedSnapshot(),
+				mode: "side" as const,
+				shelfVisibility: 0.02,
+			}),
+			setSelectedIdx: () => {},
+			clearSelected: () => {},
+			getCenterIdx: () => 0,
+			scrollBy: (delta) => scrolled.push(delta),
+			openDetail: () => {},
+		},
+		cinema: { setFocusZone: () => {} },
+		getHit: () => null,
+		getSplashActive: () => false,
+		getPortrait: () => false,
+		getWallpaperSafe: () => false,
+		getViewportWidth: () => 1200,
+		getViewportHeight: () => 900,
+		getShelfPresence: () => "always",
+	});
+
+	const forced = makeWheelEvent({ deltaY: -120, shiftKey: true });
+	target.emit("wheel", forced);
+	cleanup();
+
+	expect(scrolled).toEqual([-1]);
+	expect(forced.calls).toEqual(["preventDefault", "stopImmediatePropagation"]);
+});
+
+test("attachShelfPointerInteractionWiring does not scroll side auto wheel without current preview state", () => {
+	const target = new FakePointerTarget();
+	const scrolled: number[] = [];
+	const cleanup = attachShelfPointerInteractionWiring({
+		target,
+		shelfManager: {
+			getMode: () => "side",
+			getSnapshot: () => ({
+				...closedSnapshot(),
+				mode: "side" as const,
+				shelfVisibility: 0.9,
+			}),
+			setSelectedIdx: () => {},
+			clearSelected: () => {},
+			getCenterIdx: () => 0,
+			scrollBy: (delta) => scrolled.push(delta),
+			openDetail: () => {},
+		},
+		cinema: { setFocusZone: () => {} },
+		getHit: () => makeHit(2),
+		getSplashActive: () => false,
+		getPortrait: () => false,
+		getWallpaperSafe: () => false,
+		getViewportWidth: () => 1200,
+		getViewportHeight: () => 900,
+		getShelfPresence: () => "auto",
+	});
+
+	const normal = makeWheelEvent({ deltaY: 120 });
+	const forced = makeWheelEvent({ deltaY: 120, shiftKey: true });
+	target.emit("wheel", normal);
+	target.emit("wheel", forced);
+	cleanup();
+
+	expect(scrolled).toEqual([]);
+	expect(normal.calls).toEqual([]);
+	expect(forced.calls).toEqual([]);
+});
+
+test("attachShelfPointerInteractionWiring ignores wheel over UI, splash, open detail snapshot, and mode off", () => {
+	const target = new FakePointerTarget();
+	const scrolled: number[] = [];
+	const button = {
+		matches: (selector: string) => selector.split(",").includes("button"),
+		closest: (selector: string) => selector.split(",").includes("button") ? button : null,
+	};
+	let splashActive = false;
+	let mode: "stage" | "off" = "stage";
+	let openCardIdx = -1;
+	const cleanup = attachShelfPointerInteractionWiring({
+		target,
+		shelfManager: {
+			getMode: () => mode,
+			getSnapshot: () => ({
+				...closedSnapshot(),
+				mode,
+				openCardIdx,
+			}),
+			setSelectedIdx: () => {},
+			clearSelected: () => {},
+			getCenterIdx: () => 0,
+			scrollBy: (delta) => scrolled.push(delta),
+			openDetail: () => {},
+		},
+		cinema: { setFocusZone: () => {} },
+		getHit: () => makeHit(2),
+		getSplashActive: () => splashActive,
+		getPortrait: () => false,
+		getWallpaperSafe: () => false,
+		getViewportWidth: () => 1200,
+		getViewportHeight: () => 900,
+	});
+
+	const ui = makeWheelEvent({ deltaY: 120, target: button });
+	target.emit("wheel", ui);
+	splashActive = true;
+	const splash = makeWheelEvent({ deltaY: 120 });
+	target.emit("wheel", splash);
+	splashActive = false;
+	openCardIdx = 2;
+	const detail = makeWheelEvent({ deltaY: 120 });
+	target.emit("wheel", detail);
+	openCardIdx = -1;
+	mode = "off";
+	const off = makeWheelEvent({ deltaY: 120 });
+	target.emit("wheel", off);
+	cleanup();
+
+	expect(scrolled).toEqual([]);
+	expect(ui.calls).toEqual([]);
+	expect(splash.calls).toEqual([]);
+	expect(detail.calls).toEqual([]);
+	expect(off.calls).toEqual([]);
+});
+
+test("attachShelfPointerInteractionWiring cleanup removes wheel listener", () => {
+	const target = new FakePointerTarget();
+	const scrolled: number[] = [];
+	const cleanup = attachShelfPointerInteractionWiring({
+		target,
+		shelfManager: {
+			getMode: () => "stage",
+			getSnapshot: closedSnapshot,
+			setSelectedIdx: () => {},
+			clearSelected: () => {},
+			getCenterIdx: () => 0,
+			scrollBy: (delta) => scrolled.push(delta),
+			openDetail: () => {},
+		},
+		cinema: { setFocusZone: () => {} },
+		getHit: () => makeHit(2),
+		getSplashActive: () => false,
+		getPortrait: () => false,
+		getWallpaperSafe: () => false,
+		getViewportWidth: () => 1200,
+		getViewportHeight: () => 900,
+	});
+
+	cleanup();
+	target.emit("wheel", makeWheelEvent({ deltaY: 120 }));
+
+	expect(target.listeners.get("wheel")?.size ?? 0).toBe(0);
+	expect(scrolled).toEqual([]);
 });

@@ -8,8 +8,8 @@ import {
 } from "@mineradio/visual-engine";
 
 export interface ShelfPointerInteractionTarget {
-	addEventListener(type: string, listener: EventListener): void;
-	removeEventListener(type: string, listener: EventListener): void;
+	addEventListener(type: string, listener: EventListener, options?: boolean | AddEventListenerOptions): void;
+	removeEventListener(type: string, listener: EventListener, options?: boolean | EventListenerOptions): void;
 }
 
 export interface ShelfPointerInteractionOptions {
@@ -59,6 +59,9 @@ const BACKGROUND_TARGET_SELECTOR = [
 	"#visual-host",
 	"canvas",
 ].join(",");
+
+const WHEEL_LISTENER_OPTIONS: AddEventListenerOptions = { passive: false, capture: true };
+const WHEEL_REMOVE_OPTIONS: EventListenerOptions = { capture: true };
 
 export function isShelfInteractionUiTarget(target: EventTarget | null): boolean {
 	if (!target) return false;
@@ -120,6 +123,21 @@ export function attachShelfPointerInteractionWiring(
 		if (mode === "stage") return true;
 		if (mode !== "side") return false;
 		return snapshot.shelfVisibility > 0.34;
+	};
+
+	const canUseWheelHit = (hit: ReturnType<ShelfPointerRaycastHitGetter>): hit is ShelfRaycastCardHit => {
+		if (!canUseHit(hit)) return false;
+		const mode = opts.shelfManager.getMode();
+		if (mode === "stage") return true;
+		return mode === "side" && opts.getShelfPresence?.() === "always";
+	};
+
+	const canForceWheelScroll = (event: WheelEvent): boolean => {
+		if (!event.shiftKey) return false;
+		const mode = opts.shelfManager.getMode();
+		if (mode === "stage") return true;
+		if (mode !== "side") return false;
+		return opts.getShelfPresence?.() === "always";
 	};
 
 	const pointerInfoFromEvent = (event: PointerEvent | MouseEvent): ShelfPointerRaycastInfo => {
@@ -200,11 +218,22 @@ export function attachShelfPointerInteractionWiring(
 		});
 	};
 
+	const onWheel: EventListener = (event) => {
+		const wheelEvent = event as WheelEvent;
+		if (!canStartInteraction(event)) return;
+		const hit = opts.getHit(pointerInfoFromEvent(wheelEvent));
+		if (!canUseWheelHit(hit) && !canForceWheelScroll(wheelEvent)) return;
+		wheelEvent.preventDefault();
+		wheelEvent.stopImmediatePropagation();
+		opts.shelfManager.scrollBy(wheelEvent.deltaY > 0 ? 1 : -1);
+	};
+
 	opts.target.addEventListener("pointerdown", onPointerDown);
 	opts.target.addEventListener("pointerup", onPointerUp);
 	opts.target.addEventListener("pointercancel", onPointerCancel);
 	opts.target.addEventListener("pointermove", onPointerMove);
 	opts.target.addEventListener("click", onClick);
+	opts.target.addEventListener("wheel", onWheel, WHEEL_LISTENER_OPTIONS);
 	opts.target.addEventListener("blur", onPointerCancel);
 
 	return () => {
@@ -214,6 +243,7 @@ export function attachShelfPointerInteractionWiring(
 		opts.target.removeEventListener("pointercancel", onPointerCancel);
 		opts.target.removeEventListener("pointermove", onPointerMove);
 		opts.target.removeEventListener("click", onClick);
+		opts.target.removeEventListener("wheel", onWheel, WHEEL_REMOVE_OPTIONS);
 		opts.target.removeEventListener("blur", onPointerCancel);
 	};
 }
