@@ -17,6 +17,11 @@ export const ProviderLoginStatusSchema = z
     nickname: z.string().optional(),
     avatarUrl: z.string().optional(),
     userId: z.string().optional(),
+    vipType: z.number().optional(),
+    vipLevel: z.enum(["none", "vip", "svip"]).optional(),
+    isVip: z.boolean().optional(),
+    isSvip: z.boolean().optional(),
+    vipLabel: z.string().optional(),
   })
   .strict();
 

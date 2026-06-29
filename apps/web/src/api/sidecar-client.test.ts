@@ -686,6 +686,39 @@ test("loginStatus parses a cookie-free provider profile summary", async () => {
 	});
 });
 
+test("loginStatus parses Netease VIP profile metadata", async () => {
+	const fake = (async (input: RequestInfo | URL) => {
+		const url = typeof input === "string" ? input : input.toString();
+		expect(url).toContain("/providers/netease/login-status");
+		return jsonResponse({
+			ok: true,
+			data: {
+				provider: "netease",
+				loggedIn: true,
+				nickname: "tester",
+				userId: "42",
+				vipType: 11,
+				vipLevel: "svip",
+				isVip: true,
+				isSvip: true,
+				vipLabel: "黑胶SVIP",
+			},
+		});
+	}) as typeof fetch;
+
+	await withFetch(fake, async () => {
+		const client = new SidecarClient(BASE);
+		const status = await client.loginStatus("netease");
+		expect(status.vipType).toBe(11);
+		expect(status.vipLevel).toBe("svip");
+		expect(status.isVip).toBe(true);
+		expect(status.isSvip).toBe(true);
+		expect(status.vipLabel).toBe("黑胶SVIP");
+		expect(JSON.stringify(status)).not.toContain("MUSIC_U");
+		expect(JSON.stringify(status)).not.toContain("cookie");
+	});
+});
+
 test("logout posts to provider logout and parses ack", async () => {
 	const fake = (async (input: RequestInfo | URL, init?: RequestInit) => {
 		const url = typeof input === "string" ? input : input.toString();
