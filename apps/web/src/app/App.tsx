@@ -2973,7 +2973,6 @@ export function App({
         hasCustomCover={currentHasCustomCover}
         peek={emptyHomeActive || searchKeyword.trim().length > 0}
         requestedMode={searchModeRequest}
-        onPodcastOpen={(radio) => void playPodcastRadio(radio.id || radio.rid, radio.name || "播客")}
       />
       <TopRightControls
         onHome={goHome}

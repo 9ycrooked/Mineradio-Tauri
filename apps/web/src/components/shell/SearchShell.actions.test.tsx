@@ -176,7 +176,7 @@ test("SearchShell clears stale results after clearing input so host peek can hid
 	root.unmount();
 });
 
-test("SearchShell podcast mode renders podcast radios and opens the selected radio", async () => {
+test("SearchShell podcast mode drills into programs with back next and play actions", async () => {
 	useSearchStore.setState({
 		results: [],
 		loading: false,
@@ -185,7 +185,7 @@ test("SearchShell podcast mode renders podcast radios and opens the selected rad
 		keyword: "",
 	});
 	const calls: string[] = [];
-	const opened: string[] = [];
+	const nextCalls: string[] = [];
 	const client = {
 		async podcastHot(limit: number) {
 			calls.push(`hot:${limit}`);
@@ -204,13 +204,37 @@ test("SearchShell podcast mode renders podcast radios and opens the selected rad
 				more: false,
 			};
 		},
+		async podcastPrograms(id: string, limit: number) {
+			calls.push(`programs:${id}:${limit}`);
+			return {
+				radio: { id, rid: id, name: "午夜播客", djName: "DJ Alice" },
+				programs: [{
+					provider: "netease",
+					id: "program-song-1",
+					sourceId: "program-song-1",
+					title: "第一期",
+					artists: ["DJ Alice"],
+					album: "午夜播客",
+					coverUrl: "",
+					qualityHints: [],
+					playableState: "playable",
+					type: "podcast",
+					programId: "program-1",
+					radioId: id,
+					radioName: "午夜播客",
+					djName: "DJ Alice",
+				}],
+				more: false,
+				total: 1,
+			};
+		},
 	} as never;
 
 	const { root, container } = await renderSearchShell(
 		<SearchShell
 			client={client}
 			requestedMode="podcast"
-			onPodcastOpen={(radio) => opened.push(radio.id)}
+			onResultNext={(track) => nextCalls.push(track.id)}
 		/>,
 	);
 	for (let i = 0; i < 8 && !container.querySelector("[data-podcast-id]"); i += 1) {
@@ -220,6 +244,26 @@ test("SearchShell podcast mode renders podcast radios and opens the selected rad
 	expect(calls).toEqual(["hot:18"]);
 	expect(container.querySelector("[data-podcast-id=\"radio-1\"]")?.textContent).toContain("午夜播客");
 	(container.querySelector("[data-podcast-id=\"radio-1\"]") as HTMLButtonElement).click();
-	expect(opened).toEqual(["radio-1"]);
+	for (let i = 0; i < 8 && !container.querySelector("[data-podcast-program-id]"); i += 1) {
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	}
+	expect(calls).toEqual(["hot:18", "programs:radio-1:36"]);
+	expect(container.querySelector(".podcast-result-head")?.textContent).toContain("午夜播客");
+	expect(container.querySelector("[data-podcast-program-id=\"program-1\"]")?.textContent).toContain("第一期");
+
+	(container.querySelector(".search-shell-next") as HTMLButtonElement).click();
+	expect(nextCalls).toEqual(["program-song-1"]);
+	expect(usePlaybackStore.getState().currentTrack).toBeNull();
+
+	(container.querySelector(".podcast-back-btn") as HTMLButtonElement).click();
+	await new Promise((resolve) => setTimeout(resolve, 0));
+	expect(container.querySelector("[data-podcast-id=\"radio-1\"]")).not.toBeNull();
+
+	(container.querySelector("[data-podcast-id=\"radio-1\"]") as HTMLButtonElement).click();
+	for (let i = 0; i < 8 && !container.querySelector("[data-podcast-program-id]"); i += 1) {
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	}
+	(container.querySelector("[data-podcast-program-id=\"program-1\"]") as HTMLButtonElement).click();
+	expect(usePlaybackStore.getState().currentTrack?.id).toBe("program-song-1");
 	root.unmount();
 });

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactElement } from "react";
-import type { ProviderId, PodcastRadio, Track } from "@mineradio/shared";
+import type { ProviderId, PodcastProgram, PodcastRadio, Track } from "@mineradio/shared";
 import { SidecarClient } from "../../api/sidecar-client";
 import { isPlayable, playSearchResult } from "../search/play-search-result";
 import { useSearchStore } from "../../stores/search-store";
@@ -21,7 +21,6 @@ export interface SearchShellProps {
 	hasCustomCover?: boolean;
 	peek?: boolean;
 	requestedMode?: SearchMode;
-	onPodcastOpen?: (radio: PodcastRadio) => void;
 }
 
 const HISTORY_CHIPS: Array<{ label: string; mode?: SearchMode; keyword: string }> = [
@@ -104,7 +103,6 @@ export function SearchShell({
 	hasCustomCover = false,
 	peek = false,
 	requestedMode,
-	onPodcastOpen,
 }: SearchShellProps): ReactElement {
 	const provider = useSearchStore((s) => s.provider);
 	const keyword = useSearchStore((s) => s.keyword);
@@ -120,6 +118,8 @@ export function SearchShell({
 	const modeRef = useRef<SearchMode>("song");
 	const searchSeqRef = useRef(0);
 	const [podcastResults, setPodcastResults] = useState<PodcastRadio[]>([]);
+	const [podcastPrograms, setPodcastPrograms] = useState<PodcastProgram[]>([]);
+	const [podcastCurrentRadio, setPodcastCurrentRadio] = useState<PodcastRadio | null>(null);
 
 	const runSearch = useCallback(
 		async (nextKeyword: string, nextMode: SearchMode = modeRef.current) => {
@@ -129,6 +129,8 @@ export function SearchShell({
 			setProvider(providerFromMode(nextMode));
 			if (nextMode === "podcast") {
 				setResults([]);
+				setPodcastPrograms([]);
+				setPodcastCurrentRadio(null);
 				if (!client) {
 					setPodcastResults([]);
 					setError("sidecar 尚未就绪，稍后再试");
@@ -156,6 +158,8 @@ export function SearchShell({
 				return;
 			}
 			setPodcastResults([]);
+			setPodcastPrograms([]);
+			setPodcastCurrentRadio(null);
 			if (!trimmed) {
 				setResults([]);
 				setError(null);
@@ -188,6 +192,8 @@ export function SearchShell({
 			setLoading(false);
 			setResults([]);
 			setPodcastResults([]);
+			setPodcastPrograms([]);
+			setPodcastCurrentRadio(null);
 			setError(null);
 			return;
 		}
@@ -217,6 +223,8 @@ export function SearchShell({
 		setProvider(providerFromMode(mode));
 		setResults([]);
 		setPodcastResults([]);
+		setPodcastPrograms([]);
+		setPodcastCurrentRadio(null);
 		setError(null);
 		if (mode === "podcast") {
 			void runSearch(keyword.trim() ? keyword : "", mode);
@@ -243,6 +251,42 @@ export function SearchShell({
 		onResultPlay?.(track);
 	};
 
+	const openPodcastPrograms = async (radio: PodcastRadio) => {
+		if (!client) {
+			setError("sidecar 尚未就绪，稍后再试");
+			return;
+		}
+		const id = radio.id || radio.rid;
+		if (!id) return;
+		const seq = searchSeqRef.current + 1;
+		searchSeqRef.current = seq;
+		setPodcastCurrentRadio(radio);
+		setPodcastPrograms([]);
+		setLoading(true);
+		setError(null);
+		try {
+			const detail = await (client as Pick<SidecarClient, "podcastPrograms">).podcastPrograms(id, 36, 0);
+			if (searchSeqRef.current !== seq || modeRef.current !== "podcast") return;
+			setPodcastCurrentRadio({ ...radio, ...detail.radio, id, rid: radio.rid || id });
+			setPodcastPrograms(detail.programs);
+			setLoading(false);
+		} catch (e) {
+			if (searchSeqRef.current !== seq) return;
+			setPodcastPrograms([]);
+			setLoading(false);
+			const message = e instanceof Error ? e.message : "Episodes load failed";
+			setError(message);
+		}
+	};
+
+	const backToPodcastRadios = () => {
+		searchSeqRef.current += 1;
+		setPodcastPrograms([]);
+		setPodcastCurrentRadio(null);
+		setLoading(false);
+		setError(null);
+	};
+
 	const openArtist = (track: Track) => {
 		const artist = track.artists.find((name) => name.trim().length > 0)?.trim();
 		if (!artist) return;
@@ -259,7 +303,7 @@ export function SearchShell({
 		}
 	};
 
-	const showResults = results.length > 0 || podcastResults.length > 0 || !!error || loading || keyword.trim().length > 0 || modeRef.current === "podcast";
+	const showResults = results.length > 0 || podcastResults.length > 0 || podcastPrograms.length > 0 || !!error || loading || keyword.trim().length > 0 || modeRef.current === "podcast";
 	const effectivePeek = peek || showResults;
 
 	return (
@@ -314,10 +358,54 @@ export function SearchShell({
 					) : null}
 					{loading ? <div className="search-shell-state">搜索中...</div> : null}
 					{error ? <div className="search-shell-error">{error}</div> : null}
-					{!loading && !error && showResults && results.length === 0 && podcastResults.length === 0 ? (
+					{!loading && !error && showResults && results.length === 0 && podcastResults.length === 0 && podcastPrograms.length === 0 ? (
 						<div className="search-shell-state">没有找到结果</div>
 					) : null}
-					{podcastResults.length > 0 ? (
+					{podcastCurrentRadio ? (
+						<div className="podcast-result-head">
+							<button className="podcast-back-btn" type="button" aria-label="返回播客列表" onClick={backToPodcastRadios}>‹</button>
+							{podcastCurrentRadio.coverUrl ? <img src={podcastCurrentRadio.coverUrl} alt="" /> : <div className="search-result-cover-placeholder" />}
+							<div className="search-result-info">
+								<div className="search-result-title">{podcastCurrentRadio.name || "Podcast"}<span className="tag-podcast">Podcast</span></div>
+								<div className="search-result-meta">{podcastCurrentRadio.djName || (podcastPrograms.length ? `${podcastPrograms.length} episodes` : "No playable episodes")}</div>
+							</div>
+						</div>
+					) : null}
+					{podcastPrograms.length > 0 ? (
+						<ul className="search-shell-list search-shell-podcast-program-list">
+							{podcastPrograms.map((program, index) => (
+								<li key={`${program.provider}-${program.id}-${program.programId}-${index}`} className="search-shell-row">
+									<button
+										type="button"
+										className="search-shell-row-btn"
+										data-podcast-program-id={program.programId || program.id}
+										onClick={() => playResult(program)}
+									>
+										<span className="search-shell-cover" style={program.coverUrl ? { backgroundImage: `url("${program.coverUrl}")` } : undefined} />
+										<span className="search-shell-meta">
+											<span className="search-shell-title">{program.title}</span>
+											<span className="search-shell-sub">{program.radioName || program.album || program.djName || "Podcast"}</span>
+										</span>
+									</button>
+									<div className="search-shell-actions" aria-label="播客节目操作">
+										<button
+											type="button"
+											className="search-shell-action add-btn search-shell-next"
+											title="下一首播放"
+											aria-label="下一首播放"
+											onClick={(event) => {
+												event.stopPropagation();
+												onResultNext?.(program);
+											}}
+										>
+											+
+										</button>
+									</div>
+								</li>
+							))}
+						</ul>
+					) : null}
+					{podcastResults.length > 0 && !podcastCurrentRadio ? (
 						<ul className="search-shell-list search-shell-podcast-list">
 							{podcastResults.map((radio) => (
 								<li key={radio.id || radio.rid}>
@@ -325,7 +413,9 @@ export function SearchShell({
 										type="button"
 										className="search-result podcast-result"
 										data-podcast-id={radio.id || radio.rid}
-										onClick={() => onPodcastOpen?.(radio)}
+										onClick={() => {
+											void openPodcastPrograms(radio);
+										}}
 									>
 										{radio.coverUrl ? <img src={radio.coverUrl} alt="" /> : <div className="search-result-cover-placeholder" />}
 										<div className="search-result-info">

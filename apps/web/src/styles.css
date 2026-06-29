@@ -312,6 +312,39 @@ body.splash-active:not(.splash-revealing) #search-area {
   padding-right: 8px;
 }
 
+.podcast-result-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 10px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, .07);
+}
+
+.podcast-result-head img,
+.podcast-result-head .search-result-cover-placeholder {
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
+  flex: 0 0 auto;
+  object-fit: cover;
+}
+
+.podcast-back-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, .10);
+  background: rgba(255, 255, 255, .045);
+  color: rgba(255, 255, 255, .72);
+  cursor: pointer;
+}
+
+.podcast-back-btn:hover {
+  color: #fff;
+  border-color: rgba(244, 210, 138, .30);
+  background: rgba(244, 210, 138, .08);
+}
+
 .search-shell-action {
   width: 28px;
   height: 28px;
