@@ -24,6 +24,18 @@
 - Apache-2.0
 - BSD-2-Clause
 - BSD-3-Clause
+- 0BSD
+- Unlicense
+- CC0-1.0
+- MIT-0
+- MIT/X11
+- BlueOak-1.0.0
+- CC-BY-4.0
+- CDLA-Permissive-2.0
+- Unicode-3.0
+- Unicode-DFS-2016
+- Apache-2.0 WITH LLVM-exception
+- LGPL-2.1-or-later
 - ISC
 - MPL-2.0
 
@@ -37,14 +49,14 @@
 
 ## Release Checklist
 
-- [ ] 新项目根 license 为 GPL-3.0。
+- [x] 新项目根 license 为 GPL-3.0。 — 根目录 `LICENSE` 为 GPL-3.0 全文。
 - [x] README 明确二开/fork 来源和修改状态。  — P10.b 已将 README 改为 Tauri 二开迁移主线说明，明确 `zzstar101/Mineradio` 新仓库/updater channel、旧 Electron baseline 仅作参考、不承诺旧用户数据迁移、公开发布前 gate 未完成。
-- [ ] NOTICE 或 THIRD_PARTY_NOTICES 列出所有第三方依赖。  — P10.b 已更新 NOTICE 并新增 `THIRD_PARTY_NOTICES.md`，覆盖当前直接 manifest 依赖/关键技术及 gate 状态；仍需补齐 transitive/Rust crates 全量审核、Three.js/GSAP 最终核验和打包包含验证后再勾选。
-- [ ] Tauri/Rust crates license 已检查。
-- [ ] Bun/npm dependencies license 已检查。
-- [ ] NeteaseCloudMusicApi license 已记录。
-- [ ] Three.js license 已记录。
-- [ ] GSAP 使用范围已确认不含会员/闭源插件。
+- [ ] NOTICE 或 THIRD_PARTY_NOTICES 列出所有第三方依赖。  — P10.b 已更新 NOTICE 并新增 `THIRD_PARTY_NOTICES.md`，覆盖当前直接 manifest 依赖/关键技术及 gate 状态；2026-06-29 transitive license check 已通过，仍需安装包内 notices 真实包含和最终 notices 文本验证后再勾选。
+- [x] Tauri/Rust crates license 已检查。 — 2026-06-29 新增 `npm run license-transitive:check`，通过 `cargo metadata --locked` 审计 Tauri Rust 直接/传递依赖 license；当前真实检查覆盖 npm/Rust 合计 782 个包并通过 GPL-3.0 兼容 allowlist。
+- [x] Bun/npm dependencies license 已检查。 — 2026-06-29 新增 `npm run license-transitive:check`，适配 Bun `node_modules/.bun` 安装布局、跳过未安装的 optional platform packages，并显式记录 `qq-music-api` / legacy `jade` transitive metadata 缺口 override；当前真实检查覆盖 npm/Rust 合计 782 个包并通过。
+- [x] NeteaseCloudMusicApi license 已记录。 — `LICENSE_GATE.md` / `THIRD_PARTY_NOTICES.md` 已记录 NeteaseCloudMusicApi fallback 为 ISC，hana-music-api 主用为 MIT。
+- [x] Three.js license 已记录。 — `LICENSE_GATE.md` / `THIRD_PARTY_NOTICES.md` 已记录 npm `three` 和 baseline vendor Three.js 为 MIT。
+- [x] GSAP 使用范围已确认不含会员/闭源插件。 — 2026-06-29 code-side scan 仅发现 `gsap` 与标准包 `gsap/CustomEase` lazy import；未发现 Club/member/private plugin import，`license-transitive:check` 对 `gsap` 使用显式 standard-package allowlist。
 - [x] QQ provider 参考项目 license 审核完成。  — DECISIONS.md A6 已锁 `jsososo/QQMusicApi` / npm `qq-music-api` 为 GPL-3.0 可接入；`sansenjian/qq-music-api` 因 README 非商业附加条款与 GPL-3.0 冲突不接入。
 - [ ] 打包产物包含必要 license/notice 文件。  — 2026-06-29 packaged notices code-side policy complete：`tauri.conf.json` 已通过 `bundle.resources` 声明打包 `LICENSE`、`NOTICE.md`、`THIRD_PARTY_NOTICES.md`、`PRIVACY.md`、`SECURITY.md`，并新增 `npm run packaged-notices:check` 防回退；仍需 Windows 安装包/安装后目录产物验证后再勾选。
 - [ ] Release notes 不暗示本项目是网易云、QQ 音乐或原 Mineradio 官方版本。
@@ -53,13 +65,14 @@
 
 以下项目均为公开发布硬门槛。它们不是可以跳过的延期能力，也不能只凭代码侧接入记录关闭；必须有审核记录、打包产物证据或明确发布决策后才能勾选 Release Checklist 和 `CAPABILITY_PARITY_CHECKLIST.md` 的 License / Update gate。
 
-- Rust crates full audit：必须基于最终 `Cargo.lock` / Tauri plugin 集合完成全量直接与传递依赖 license 审核，并消除 Dependency Audit 表里的 Rust `待审核`。
-- npm transitive full audit：必须基于最终 `bun.lock` / workspace manifests 完成 npm 直接与传递依赖 full audit；当前只记录了关键直接依赖与部分 provider 传递依赖。
-- GSAP standard-only final check：必须确认最终打包内容只包含 GSAP 标准能力，不包含 Club/member/闭源插件、私有插件或未授权商业资产。
+- Rust crates full audit：2026-06-29 code-side complete；`npm run license-transitive:check` 基于最终当前 `Cargo.lock` / Tauri plugin 集合执行 `cargo metadata --locked` 并通过。若后续新增 Rust 依赖或 Tauri plugin，必须重新运行并更新本 gate。
+- npm transitive full audit：2026-06-29 code-side complete；`npm run license-transitive:check` 基于当前 workspace manifests、Bun `.bun` 安装目录和实际可安装依赖闭包通过。若后续新增 npm 依赖，必须重新运行并更新本 gate。
+- GSAP standard-only final check：2026-06-29 code-side complete；源码扫描只发现 `gsap` 与标准包 `gsap/CustomEase`，未发现 Club/member/闭源插件、私有插件或未授权商业资产。若后续新增 GSAP 插件 import，必须重新审核。
 - Direct dependency allowlist enforcement：`npm run license:check` 会检查 Tauri 迁移目标 workspace manifests 和 `apps/desktop/src-tauri/Cargo.toml` 的直接依赖，要求它们全部进入 Dependency Audit 表且 Decision 不为 `待审核`。该检查不替代 Rust/npm transitive full audit。
 - packaged notices inclusion：`npm run packaged-notices:check` 会静态检查 Tauri bundle resources 已声明 `LICENSE`、`NOTICE.md`、`THIRD_PARTY_NOTICES.md`、`PRIVACY.md`、`SECURITY.md`；公开发布前仍必须验证 Windows 安装包/安装后目录真实包含这些文件及必要第三方 license 文本。
 - release notes wording：真实 GitHub Release notes 必须明确本项目是 GPL-3.0 二开/fork/rewrite，不暗示网易云音乐、QQ 音乐或原 Mineradio 官方身份。
 - updater signature/release artifact relation：`npm run updater-policy:check` 会在 B2 pubkey 为空时静态锁定 detection-only：Tauri updater endpoint 仍指向 `zzstar101/Mineradio`，Rust/web 不暴露 download/install helper，UI 保留 `signature-key-missing` 不可安装文案；公开发布前仍必须在最终发布路径下明确 Tauri updater manifest、签名字段、公钥配置、安装包资产和 release 上传资产之间的关系。若继续 detection-only，不得展示可安装更新为已通过 gate，且需在 release notes/UI 中说明。
+- transitive license enforcement：`npm run license-transitive:check` 会检查迁移目标 workspace 的 npm 运行/构建依赖闭包与 Tauri Rust crates；Bun optional platform packages 缺失不会导致当前平台失败，GSAP 标准包、`qq-music-api` GPL-3.0、legacy `css`/`uglify-js` metadata 缺口通过脚本 override 明确记录。该检查不替代安装包内 notices 真实包含验证。
 
 ## QQ 开源项目审核表
 
@@ -72,9 +85,9 @@
 
 | Dependency | Ecosystem | License | Purpose | Distribution Risk | Decision |
 | --- | --- | --- | --- | --- | --- |
-| tauri | Rust (crate) | MIT/Apache-2.0 | 桌面壳 + updater + window/sidecar 能力 | 直接依赖 license 已按本地 crate metadata 核对；Rust transitive full audit 仍需发布前完成 | 通过（direct） |
+| tauri | Rust (crate) | MIT/Apache-2.0 | 桌面壳 + updater + window/sidecar 能力 | 直接依赖 license 已按本地 crate metadata 核对；`license-transitive:check` 已覆盖 Rust closure | 通过（direct + transitive checked） |
 | @tauri-apps/cli | npm devDependency | MIT/Apache-2.0 | Tauri dev/build CLI | 兼容；安装包包含 notices 仍需验证 | 通过 |
-| tauri-build | Rust build-dependency | MIT/Apache-2.0 | Tauri build script integration | 直接依赖 license 已按本地 crate metadata 核对；Rust transitive full audit 仍需发布前完成 | 通过（direct） |
+| tauri-build | Rust build-dependency | MIT/Apache-2.0 | Tauri build script integration | 直接依赖 license 已按本地 crate metadata 核对；`license-transitive:check` 已覆盖 Rust closure | 通过（direct + transitive checked） |
 | Bun | Runtime | MIT | sidecar runtime/workspace | MIT 兼容 | 通过 |
 | Vite | npm | MIT | 前端构建 | MIT 兼容 | 通过 |
 | @vitejs/plugin-react | npm | MIT | Vite React transform / Fast Refresh integration | MIT 兼容 | 通过 |
@@ -93,8 +106,8 @@
 | tauri-plugin-updater 2.10.0 | Rust (crate) | MIT/Apache-2.0 | Tauri updater 检测和签名校验通道；P10.a 只启用 check，download/install 仍受签名 gate 阻挡 | 兼容；公开安装更新仍需 pubkey/signature 或最终风险决策 | 通过（检测接入） |
 | tauri-plugin-fs | Rust (crate, transitive via tauri-plugin-dialog) | MIT/Apache-2.0 | dialog FilePath conversion / scoped filesystem support | 兼容 | 通过（transitive） |
 | rfd | Rust (crate, transitive via tauri-plugin-dialog) | MIT | native file dialog backend | 兼容 | 通过（transitive） |
-| serde | Rust (crate) | MIT/Apache-2.0 | Rust command/config serialization | 直接依赖 license 已按本地 crate metadata 核对；Rust transitive full audit 仍需发布前完成 | 通过（direct） |
-| serde_json | Rust (crate) | MIT/Apache-2.0 | Rust JSON command payloads and config helpers | 直接依赖 license 已按本地 crate metadata 核对；Rust transitive full audit 仍需发布前完成 | 通过（direct） |
+| serde | Rust (crate) | MIT/Apache-2.0 | Rust command/config serialization | 直接依赖 license 已按本地 crate metadata 核对；`license-transitive:check` 已覆盖 Rust closure | 通过（direct + transitive checked） |
+| serde_json | Rust (crate) | MIT/Apache-2.0 | Rust JSON command payloads and config helpers | 直接依赖 license 已按本地 crate metadata 核对；`license-transitive:check` 已覆盖 Rust closure | 通过（direct + transitive checked） |
 | dirs (crate) | Rust (crate) | MIT | app data/log 路径解析 | MIT 兼容 | 通过 |
 | time 0.3 | Rust (crate) | MIT/Apache-2.0 | 格式化 Tauri updater `OffsetDateTime` 为 RFC3339 状态字段 | 兼容 | 通过 |
 | hana-music-api | npm | MIT | Netease provider（主用） | MIT 兼容；极新 2 stars/v1.1.1，parity 风险见 DECISIONS.md A8 | 通过（带 parity 风险） |
@@ -117,6 +130,7 @@
 | hono | npm (hana 依赖) | MIT | HTTP 框架 | MIT 兼容 | 通过 |
 | music-metadata | npm (hana 依赖) | MIT | 音频元数据 | MIT 兼容 | 通过 |
 | qrcode | npm (hana 依赖) | MIT/BSD-3-Clause | QR 登录 | 兼容 | 通过 |
+| transitive npm/Rust dependency closure | npm + Rust | GPL-3.0-compatible allowlist（含 MIT/Apache/BSD/ISC/MPL/0BSD/Unlicense/CC0/MIT-0/BlueOak/CDLA-Permissive/Unicode/Apache LLVM exception/LGPL-or-later 等） | Tauri 迁移目标 workspace 与 Rust crates 的发布前全量 license 静态审计 | `npm run license-transitive:check` 当前通过，覆盖 782 packages；后续新增依赖必须重跑 | 通过（transitive check） |
 
 ## 通过标准
 
