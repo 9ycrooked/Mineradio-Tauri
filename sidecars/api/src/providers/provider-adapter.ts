@@ -4,7 +4,10 @@ import type {
   PlaylistDetail,
   LyricPayload,
   ProviderId,
+  PlaybackRestriction,
+  PlaybackRestrictionCategory,
   PlaybackQuality,
+  SongUrlResult,
   SongLikeAck,
   SongLikeCheckAck,
   PlaylistAddSongAck
@@ -16,17 +19,15 @@ export type ProviderLoginStatus = {
   nickname?: string;
   avatarUrl?: string;
   userId?: string;
+  vipType?: number;
+  vipLevel?: "none" | "vip" | "svip";
+  isVip?: boolean;
+  isSvip?: boolean;
+  vipLabel?: string;
 };
 
 export type SongUrlOptions = { quality?: PlaybackQuality };
-export type SongUrlResult = {
-  url: string;
-  proxied: boolean;
-  level?: PlaybackQuality;
-  quality?: string;
-  br?: number;
-  requestedQuality?: PlaybackQuality | null;
-};
+export type { SongUrlResult };
 
 export interface ProviderAdapter {
   readonly id: ProviderId;
@@ -60,11 +61,26 @@ export class ProviderError extends Error {
   readonly provider: ProviderId;
   readonly retryable: boolean;
   readonly action?: string;
+  readonly playbackKeyReady?: boolean;
+  readonly restriction?: PlaybackRestriction;
+  readonly reason?: PlaybackRestrictionCategory;
+  readonly qqCode?: number;
+  readonly rawMessage?: string;
+  readonly tried?: string[];
   constructor(
     provider: ProviderId,
     code: string,
     message: string,
-    opts?: { retryable?: boolean; action?: string }
+    opts?: {
+      retryable?: boolean;
+      action?: string;
+      playbackKeyReady?: boolean;
+      restriction?: PlaybackRestriction;
+      reason?: PlaybackRestrictionCategory;
+      qqCode?: number;
+      rawMessage?: string;
+      tried?: string[];
+    }
   ) {
     super(message);
     this.name = "ProviderError";
@@ -72,5 +88,11 @@ export class ProviderError extends Error {
     this.code = code;
     this.retryable = opts?.retryable ?? false;
     this.action = opts?.action;
+    this.playbackKeyReady = opts?.playbackKeyReady;
+    this.restriction = opts?.restriction;
+    this.reason = opts?.reason;
+    this.qqCode = opts?.qqCode;
+    this.rawMessage = opts?.rawMessage;
+    this.tried = opts?.tried;
   }
 }

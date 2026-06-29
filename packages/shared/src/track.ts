@@ -16,6 +16,7 @@ export const TrackSchema = z.object({
   provider: ProviderIdSchema,
   id: z.string().min(1),
   sourceId: z.string().min(1),
+  mediaMid: z.string().optional(),
   title: z.string(),
   artists: z.array(z.string()),
   album: z.string().optional().default(""),

@@ -383,6 +383,7 @@ test("resolveSongUrl POSTs to the cross-source song-url endpoint", async () => {
 		expect(result.proxied).toBe(false);
 		expect(result.requestedQuality).toBe("lossless");
 		expect(receivedBody).toEqual({ track: SAMPLE_TRACK, quality: "lossless" });
+		if (!result.url) throw new Error("expected playable test url");
 		expect(client.audioProxyUrl(result.url)).toBe(`${BASE}/audio-proxy?url=https%3A%2F%2Fmedia.example%2Fa.mp3`);
 	});
 });
@@ -652,6 +653,20 @@ test("request preserves provider failure envelope on non-2xx response", async ()
 				provider: "qq",
 				retryable: true,
 				action: "login",
+				playbackKeyReady: false,
+				reason: "login_required",
+				qqCode: 104003,
+				rawMessage: "no vkey",
+				tried: ["无损 FLAC · F000abc.flac"],
+				restriction: {
+					provider: "qq",
+					category: "login_required",
+					action: "login",
+					message: "需要登录后播放",
+					code: 104003,
+					rawMessage: "no vkey",
+					missingPlaybackKey: true,
+				},
 			},
 		}, 401)) as typeof fetch;
 	await withFetch(fake, async () => {
@@ -667,5 +682,10 @@ test("request preserves provider failure envelope on non-2xx response", async ()
 		expect((caught as SidecarClientError).provider).toBe("qq");
 		expect((caught as SidecarClientError).retryable).toBe(true);
 		expect((caught as SidecarClientError).action).toBe("login");
+		expect((caught as SidecarClientError).playbackKeyReady).toBe(false);
+		expect((caught as SidecarClientError).reason).toBe("login_required");
+		expect((caught as SidecarClientError).qqCode).toBe(104003);
+		expect((caught as SidecarClientError).rawMessage).toBe("no vkey");
+		expect((caught as SidecarClientError).tried).toEqual(["无损 FLAC · F000abc.flac"]);
 	});
 });

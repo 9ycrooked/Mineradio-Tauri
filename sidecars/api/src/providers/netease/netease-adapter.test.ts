@@ -182,6 +182,127 @@ test("songUrl falls back to legacy br endpoint when Netease songUrlV1 throws", a
   expect(out.requestedQuality).toBe("exhigh");
 });
 
+test("songUrl returns baseline trial metadata when Netease only returns a free trial URL", async () => {
+  const calls: string[] = [];
+  const deps = noopDeps({
+    getConfig: () => ({}),
+    songUrlV1: async (query) => {
+      calls.push(String(query["level"]));
+      return {
+        body: {
+          data: [{
+            id: 1,
+            url: "http://trial-audio",
+            br: 128000,
+            fee: 8,
+            code: 200,
+            freeTrialInfo: { start: 0, end: 60 }
+          }]
+        }
+      };
+    }
+  });
+  const adapter = createNeteaseAdapter(deps);
+  const out = await adapter.songUrl(trackFixture, { quality: "standard" });
+
+  expect(calls).toEqual(["standard"]);
+  expect(out.url).toBe("http://trial-audio");
+  expect(out.trial).toBe(true);
+  expect(out.playable).toBe(true);
+  expect(out.reason).toBe("trial_only");
+  expect(out.loggedIn).toBe(false);
+  expect(out.vipLevel).toBe("none");
+  expect(out.restriction).toEqual({
+    provider: "netease",
+    category: "trial_only",
+    action: "upgrade",
+    message: "网易云仅返回试听片段，完整播放需要会员或购买",
+    code: 200,
+    fee: 8
+  });
+});
+
+test("songUrl carries logged-in VIP state into Netease trial metadata", async () => {
+  const deps = noopDeps({
+    getConfig: () => ({ cookie: "MUSIC_U=fake" }),
+    loginStatus: async () => ({
+      body: {
+        data: {
+          profile: {
+            userId: 42,
+            nickname: "vip user",
+            avatarUrl: "",
+            vipType: 1,
+            vipLevel: "vip",
+            isVip: true,
+            isSvip: false,
+            vipLabel: "黑胶VIP"
+          }
+        }
+      }
+    }),
+    songUrlV1: async () => ({
+      body: {
+        data: [{
+          id: 1,
+          url: "http://trial-audio",
+          br: 128000,
+          fee: 8,
+          code: 200,
+          freeTrialInfo: { start: 0, end: 60 }
+        }]
+      }
+    })
+  });
+  const adapter = createNeteaseAdapter(deps);
+  const out = await adapter.songUrl(trackFixture, { quality: "standard" });
+
+  expect(out.trial).toBe(true);
+  expect(out.loggedIn).toBe(true);
+  expect(out.vipType).toBe(1);
+  expect(out.vipLevel).toBe("vip");
+  expect(out.isVip).toBe(true);
+  expect(out.isSvip).toBe(false);
+  expect(out.vipLabel).toBe("黑胶VIP");
+  expect(out.message).toBe("此歌曲需要 SVIP 或购买 · 当前仅播放试听片段");
+});
+
+test("songUrl normalizes numeric Netease SVIP vipType for trial banner metadata", async () => {
+  const deps = noopDeps({
+    getConfig: () => ({ cookie: "MUSIC_U=fake" }),
+    loginStatus: async () => ({
+      body: {
+        data: {
+          profile: {
+            userId: 42,
+            nickname: "svip user",
+            avatarUrl: "",
+            vipType: 11
+          }
+        }
+      }
+    }),
+    songUrlV1: async () => ({
+      body: {
+        data: [{
+          id: 1,
+          url: "http://trial-audio",
+          br: 128000,
+          fee: 8,
+          code: 200,
+          freeTrialInfo: { start: 0, end: 60 }
+        }]
+      }
+    })
+  });
+  const adapter = createNeteaseAdapter(deps);
+  const out = await adapter.songUrl(trackFixture, { quality: "standard" });
+
+  expect(out.vipType).toBe(11);
+  expect(out.vipLevel).toBe("svip");
+  expect(out.message).toBe("此歌曲需要单曲、专辑购买或更高权限");
+});
+
 test("songUrl for url:null + code:401 throws ProviderError LOGIN_REQUIRED", async () => {
   const deps = noopDeps({
     songUrlV1: async () => ({ body: { data: [{ id: 1, url: null, code: 401, fee: 0 }] } })

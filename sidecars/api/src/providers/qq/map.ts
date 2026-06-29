@@ -9,6 +9,13 @@ import type {
 export interface QqSong {
   songmid?: string;
   mid?: string;
+  media_mid?: string;
+  strMediaMid?: string;
+  mediaMid?: string;
+  file?: {
+    media_mid?: string;
+    strMediaMid?: string;
+  };
   songname?: string;
   name?: string;
   singer?: Array<{ mid?: string; name?: string } | null | undefined>;
@@ -45,6 +52,13 @@ export interface QqPlaylistBody {
 
 export function mapQqSongToTrack(raw: QqSong): Track {
   const idStr = raw && raw.songmid != null ? String(raw.songmid) : (raw?.mid != null ? String(raw.mid) : "");
+  const mediaMidRaw =
+    raw?.file?.media_mid ??
+    raw?.file?.strMediaMid ??
+    raw?.media_mid ??
+    raw?.strMediaMid ??
+    raw?.mediaMid;
+  const mediaMid = mediaMidRaw != null ? String(mediaMidRaw) : undefined;
   const singers = raw && Array.isArray(raw.singer) ? raw.singer : [];
   const artists: string[] = [];
   for (const s of singers) {
@@ -74,6 +88,7 @@ export function mapQqSongToTrack(raw: QqSong): Track {
     provider: "qq",
     id: idStr,
     sourceId: idStr,
+    mediaMid,
     title: raw?.songname ?? raw?.name ?? "",
     artists,
     album: raw?.albumname ?? "",

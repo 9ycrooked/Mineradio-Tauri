@@ -46,17 +46,26 @@ class AppStubAudioElement extends EventTarget {
 	}
 }
 
+const appStubAudioInstances: AppStubAudioElement[] = [];
+
 function installAppStubAudio(): () => void {
 	const previousWindowAudio = (window as unknown as { Audio?: typeof Audio }).Audio;
 	const hadGlobalAudio = "Audio" in globalThis;
 	const previousGlobalAudio = (globalThis as unknown as { Audio?: typeof Audio }).Audio;
 	const hadGlobalHtmlAudioElement = "HTMLAudioElement" in globalThis;
 	const previousGlobalHtmlAudioElement = (globalThis as unknown as { HTMLAudioElement?: typeof HTMLAudioElement }).HTMLAudioElement;
-	const AudioCtor = AppStubAudioElement as unknown as typeof Audio;
-	(window as unknown as { Audio?: typeof Audio }).Audio = AudioCtor;
-	(globalThis as unknown as { Audio?: typeof Audio }).Audio = AudioCtor;
+	const TrackingAudio = class extends AppStubAudioElement {
+		constructor() {
+			super();
+			appStubAudioInstances.push(this);
+		}
+	} as unknown as typeof Audio;
+	appStubAudioInstances.length = 0;
+	(window as unknown as { Audio?: typeof Audio }).Audio = TrackingAudio;
+	(globalThis as unknown as { Audio?: typeof Audio }).Audio = TrackingAudio;
 	(globalThis as unknown as { HTMLAudioElement?: typeof HTMLAudioElement }).HTMLAudioElement = AppStubAudioElement as unknown as typeof HTMLAudioElement;
 	return () => {
+		appStubAudioInstances.length = 0;
 		(window as unknown as { Audio?: typeof Audio }).Audio = previousWindowAudio;
 		if (hadGlobalAudio) {
 			(globalThis as unknown as { Audio?: typeof Audio }).Audio = previousGlobalAudio;
@@ -500,6 +509,165 @@ test("App replaces stale lyrics with current track fallback while provider lyric
 		durationMs: 9999000,
 		charCount: 29,
 	});
+
+	root.unmount();
+	host.remove();
+	usePlaybackStore.getState().clearQueue();
+	useLyricsStore.getState().reset();
+	localStorage.clear();
+	restoreAudio();
+});
+
+test("App shows the baseline trial banner when provider returns a trial-only URL", async () => {
+	await import("../../../../packages/visual-engine/src/runtime/happy-dom-preload");
+	(globalThis as unknown as { localStorage: Storage }).localStorage = window.localStorage;
+	const restoreAudio = installAppStubAudio();
+	localStorage.clear();
+	usePlaybackStore.getState().clearQueue();
+	useLyricsStore.getState().reset();
+	usePlaybackStore.getState().setCurrentTrack({
+		provider: "netease",
+		id: "trial-1",
+		sourceId: "trial-1",
+		title: "Trial Song",
+		artists: ["Artist"],
+		album: "",
+		coverUrl: "",
+		durationMs: 60000,
+		qualityHints: [],
+		playableState: "trial_only",
+	});
+
+	const fakeClient = {
+		async resolveSongUrl() {
+			return {
+				url: "https://example.com/trial.mp3",
+				quality: "标准",
+				proxied: false,
+				provider: "netease",
+				trial: true,
+				playable: true,
+				loggedIn: false,
+				vipLevel: "none",
+				reason: "trial_only",
+				message: "当前未登录 · 仅播放试听片段",
+			};
+		},
+		audioProxyUrl(url: string) {
+			return `http://127.0.0.1:39999/audio-proxy?url=${encodeURIComponent(url)}`;
+		},
+		async lyric() {
+			return {
+				provider: "netease",
+				trackId: "trial-1",
+				lines: [],
+				hasTranslation: false,
+				isWordByWord: false,
+			};
+		},
+	} as unknown as SidecarClient;
+	const rootConfig: RuntimeConfig = {
+		sidecarBaseUrl: "http://127.0.0.1:39999",
+		appDataDir: "",
+		appVersion: "0.0.0-test",
+		schemaVersion: "0.1.0",
+		updaterPublicKeyConfigured: false,
+	};
+	const host = document.createElement("div");
+	document.body.appendChild(host);
+	const root = createRoot(host);
+	flushSync(() => root.render(<App SplashComponent={() => null} VisualComponent={() => <div id="visual-host" />} createSidecarClient={() => fakeClient} initialRuntimeConfig={rootConfig} />));
+
+	for (let i = 0; i < 12 && !host.querySelector("#trial-banner.show"); i += 1) {
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	}
+
+	const banner = host.querySelector("#trial-banner");
+	expect(banner?.classList.contains("show")).toBe(true);
+	expect(host.querySelector("#trial-text")?.textContent).toBe("当前未登录 · 仅播放试听片段");
+	const loginButton = host.querySelector("#trial-login-btn") as HTMLButtonElement | null;
+	expect(loginButton?.style.display).not.toBe("none");
+	loginButton?.click();
+	await new Promise((resolve) => setTimeout(resolve, 0));
+	expect(host.querySelector("#login-modal")).not.toBeNull();
+
+	root.unmount();
+	host.remove();
+	usePlaybackStore.getState().clearQueue();
+	useLyricsStore.getState().reset();
+	localStorage.clear();
+	restoreAudio();
+});
+
+test("App clears the trial banner when the audio element reports a playback error", async () => {
+	await import("../../../../packages/visual-engine/src/runtime/happy-dom-preload");
+	(globalThis as unknown as { localStorage: Storage }).localStorage = window.localStorage;
+	const restoreAudio = installAppStubAudio();
+	localStorage.clear();
+	usePlaybackStore.getState().clearQueue();
+	useLyricsStore.getState().reset();
+	usePlaybackStore.getState().setCurrentTrack({
+		provider: "netease",
+		id: "trial-error-1",
+		sourceId: "trial-error-1",
+		title: "Trial Error Song",
+		artists: ["Artist"],
+		album: "",
+		coverUrl: "",
+		durationMs: 60000,
+		qualityHints: [],
+		playableState: "trial_only",
+	});
+
+	const fakeClient = {
+		async resolveSongUrl() {
+			return {
+				url: "https://example.com/trial-error.mp3",
+				quality: "标准",
+				proxied: false,
+				provider: "netease",
+				trial: true,
+				playable: true,
+				loggedIn: false,
+				vipLevel: "none",
+				reason: "trial_only",
+				message: "当前未登录 · 仅播放试听片段",
+			};
+		},
+		audioProxyUrl(url: string) {
+			return `http://127.0.0.1:39999/audio-proxy?url=${encodeURIComponent(url)}`;
+		},
+		async lyric() {
+			return {
+				provider: "netease",
+				trackId: "trial-error-1",
+				lines: [],
+				hasTranslation: false,
+				isWordByWord: false,
+			};
+		},
+	} as unknown as SidecarClient;
+	const rootConfig: RuntimeConfig = {
+		sidecarBaseUrl: "http://127.0.0.1:39999",
+		appDataDir: "",
+		appVersion: "0.0.0-test",
+		schemaVersion: "0.1.0",
+		updaterPublicKeyConfigured: false,
+	};
+	const host = document.createElement("div");
+	document.body.appendChild(host);
+	const root = createRoot(host);
+	flushSync(() => root.render(<App SplashComponent={() => null} VisualComponent={() => <div id="visual-host" />} createSidecarClient={() => fakeClient} initialRuntimeConfig={rootConfig} />));
+
+	for (let i = 0; i < 12 && !host.querySelector("#trial-banner.show"); i += 1) {
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	}
+	expect(host.querySelector("#trial-banner")?.classList.contains("show")).toBe(true);
+
+	appStubAudioInstances[0]?.dispatchEvent(new Event("error"));
+	await new Promise((resolve) => setTimeout(resolve, 0));
+
+	expect(host.querySelector("#trial-banner")?.classList.contains("show")).toBe(false);
 
 	root.unmount();
 	host.remove();

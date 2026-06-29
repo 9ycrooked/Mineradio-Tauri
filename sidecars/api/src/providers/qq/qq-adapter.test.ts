@@ -4,6 +4,7 @@ import {
   ProviderNotImplementedError
 } from "../provider-adapter";
 import { createQqAdapter, type QqClientDeps } from "./qq-adapter";
+import { mapQqSongToTrack } from "./map";
 import type { Track } from "@mineradio/shared";
 
 const trackFixture: Track = {
@@ -17,6 +18,17 @@ const trackFixture: Track = {
   qualityHints: ["standard"],
   playableState: "unknown"
 };
+
+test("mapQqSongToTrack preserves QQ file media_mid for vkey filename generation", () => {
+  const track = mapQqSongToTrack({
+    songmid: "song-mid",
+    songname: "song",
+    file: { media_mid: "media-mid" }
+  });
+
+  expect(track.sourceId).toBe("song-mid");
+  expect(track.mediaMid).toBe("media-mid");
+});
 
 function withEnv(key: string, value: string | undefined, run: () => Promise<void> | void): Promise<void> {
   const prev = process.env[key];
@@ -203,6 +215,23 @@ test("songUrl maps requested playback quality to qq type and returns resolved qu
   expect(out.requestedQuality).toBe("lossless");
 });
 
+test("songUrl builds baseline QQ filenames from mediaMid when it differs from songmid", async () => {
+  let lastQuery: Record<string, unknown> = {};
+  const deps = noopDeps({
+    getConfig: () => ({ cookie: "uin=123; qqmusic_key=abc" }),
+    songUrl: async (query) => {
+      lastQuery = query;
+      return { body: "http://audio.example/media-mid.flac" };
+    }
+  });
+  const adapter = createQqAdapter(deps);
+  const out = await adapter.songUrl({ ...trackFixture, mediaMid: "media-mid" }, { quality: "lossless" });
+
+  expect(lastQuery["filename"]).toBe("F000media-mid.flac");
+  expect(lastQuery["id"]).toBe("002Zkt5S2oAB7X");
+  expect(out.filename).toBe("F000media-mid.flac");
+});
+
 test("songUrl walks the QQ quality ladder until a playable URL is returned", async () => {
   const calls: string[] = [];
   const deps = noopDeps({
@@ -222,6 +251,33 @@ test("songUrl walks the QQ quality ladder until a playable URL is returned", asy
   expect(out.requestedQuality).toBe("lossless");
 });
 
+test("songUrl parses baseline QQ musicu midurlinfo plus sip response", async () => {
+  const deps = noopDeps({
+    getConfig: () => ({ cookie: "uin=123; qqmusic_key=abc" }),
+    songUrl: async () => ({
+      body: {
+        req_0: {
+          data: {
+            sip: ["https://ws.stream.qqmusic.qq.com/"],
+            midurlinfo: [{
+              filename: "F000002Zkt5S2oAB7X.flac",
+              purl: "C400002Zkt5S2oAB7X.m4a?guid=1",
+              result: 0
+            }]
+          }
+        }
+      }
+    })
+  });
+  const adapter = createQqAdapter(deps);
+  const out = await adapter.songUrl(trackFixture, { quality: "lossless" });
+
+  expect(out.url).toBe("https://ws.stream.qqmusic.qq.com/C400002Zkt5S2oAB7X.m4a?guid=1");
+  expect(out.filename).toBe("F000002Zkt5S2oAB7X.flac");
+  expect(out.level).toBe("lossless");
+  expect(out.quality).toBe("无损 FLAC");
+});
+
 test("songUrl with cookie but empty url throws ProviderError UNAVAILABLE", async () => {
   const deps = noopDeps({
     getConfig: () => ({ cookie: "uin=123; qqmusic_key=abc" }),
@@ -238,6 +294,96 @@ test("songUrl with cookie but empty url throws ProviderError UNAVAILABLE", async
   const e = err as ProviderError;
   expect(e.code).toBe("UNAVAILABLE");
   expect(e.provider).toBe("qq");
+});
+
+test("songUrl classifies QQ 104003 without playback key as LOGIN_REQUIRED", async () => {
+  const calls: string[] = [];
+  const deps = noopDeps({
+    getConfig: () => ({ cookie: "uin=123" }),
+    songUrl: async (query) => {
+      calls.push(String(query["type"]));
+      return {
+        body: {
+          code: 104003,
+          msg: "no vkey",
+          url: ""
+        }
+      };
+    }
+  });
+  const adapter = createQqAdapter(deps);
+  let err: unknown = null;
+  try {
+    await adapter.songUrl(trackFixture, { quality: "lossless" });
+  } catch (e) {
+    err = e;
+  }
+  expect(calls).toEqual(["flac"]);
+  expect(err).toBeInstanceOf(ProviderError);
+  const e = err as ProviderError;
+  expect(e.code).toBe("LOGIN_REQUIRED");
+  expect(e.provider).toBe("qq");
+  expect(e.retryable).toBe(true);
+  expect(e.action).toBe("login");
+  expect(e.message).toContain("播放授权");
+  expect(e.playbackKeyReady).toBe(false);
+  expect(e.reason).toBe("login_required");
+  expect(e.qqCode).toBe(104003);
+  expect(e.rawMessage).toBe("no vkey");
+  expect(e.tried).toEqual([
+    "无损 FLAC · F000002Zkt5S2oAB7X.flac",
+    "320k MP3 · M800002Zkt5S2oAB7X.mp3",
+    "128k MP3 · M500002Zkt5S2oAB7X.mp3"
+  ]);
+  expect(e.restriction?.provider).toBe("qq");
+  expect(e.restriction?.category).toBe("login_required");
+  expect(e.restriction?.action).toBe("login");
+  expect(e.restriction?.code).toBe(104003);
+  expect(e.restriction?.rawMessage).toBe("no vkey");
+  expect(e.restriction?.missingPlaybackKey).toBe(true);
+  expect(e.restriction).toEqual({
+    provider: "qq",
+    category: "login_required",
+    action: "login",
+    message: "QQ 音乐当前只拿到了网页登录状态，还缺少播放授权，请重新打开官方 QQ 音乐登录窗口完成授权",
+    code: 104003,
+    rawMessage: "no vkey",
+    missingPlaybackKey: true
+  });
+});
+
+test("songUrl classifies baseline QQ midurlinfo restriction without losing metadata", async () => {
+  const deps = noopDeps({
+    getConfig: () => ({ cookie: "uin=123" }),
+    songUrl: async () => ({
+      body: {
+        req_0: {
+          data: {
+            sip: ["https://ws.stream.qqmusic.qq.com/"],
+            midurlinfo: [{
+              filename: "F000002Zkt5S2oAB7X.flac",
+              purl: "",
+              result: 104003,
+              msg: "no vkey from musicu"
+            }]
+          }
+        }
+      }
+    })
+  });
+  const adapter = createQqAdapter(deps);
+  let err: unknown = null;
+  try {
+    await adapter.songUrl(trackFixture, { quality: "lossless" });
+  } catch (e) {
+    err = e;
+  }
+  expect(err).toBeInstanceOf(ProviderError);
+  const e = err as ProviderError;
+  expect(e.code).toBe("LOGIN_REQUIRED");
+  expect(e.qqCode).toBe(104003);
+  expect(e.rawMessage).toBe("no vkey from musicu");
+  expect(e.restriction?.missingPlaybackKey).toBe(true);
 });
 
 test("lyric maps body.lyric + body.trans to LyricPayload (hasTranslation true)", async () => {

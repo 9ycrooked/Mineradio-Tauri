@@ -1,5 +1,5 @@
 import { fail } from "../http/envelope";
-import type { ApiResponse, ProviderId } from "@mineradio/shared";
+import type { ApiResponse, PlaybackRestriction, ProviderId } from "@mineradio/shared";
 import { ProviderNotImplementedError, ProviderError } from "../providers/provider-adapter";
 
 const REDACTED_PROVIDER_ERROR_MESSAGE = "provider error redacted";
@@ -30,6 +30,19 @@ export function redactErrorMessage(message: string): string {
   return text;
 }
 
+function normalizeRestriction(restriction: PlaybackRestriction): PlaybackRestriction {
+  return {
+    provider: restriction.provider,
+    category: restriction.category,
+    action: restriction.action ?? "",
+    message: redactErrorMessage(restriction.message),
+    ...(restriction.code !== undefined ? { code: restriction.code } : {}),
+    ...(restriction.fee !== undefined ? { fee: restriction.fee } : {}),
+    ...(restriction.rawMessage !== undefined ? { rawMessage: redactErrorMessage(restriction.rawMessage) } : {}),
+    ...(restriction.missingPlaybackKey !== undefined ? { missingPlaybackKey: restriction.missingPlaybackKey } : {})
+  };
+}
+
 export function normalizeError(provider: ProviderId, err: unknown): ApiResponse<never> {
   if (err instanceof ProviderNotImplementedError) {
     return fail({
@@ -41,12 +54,21 @@ export function normalizeError(provider: ProviderId, err: unknown): ApiResponse<
     });
   }
   if (err instanceof ProviderError) {
+    const rawMessage = err.rawMessage ? redactErrorMessage(err.rawMessage) : undefined;
+    const restriction = err.restriction ? normalizeRestriction(err.restriction) : undefined;
+    const tried = err.tried?.map(entry => redactErrorMessage(entry));
     return fail({
       code: err.code,
       message: redactErrorMessage(err.message),
       provider: err.provider,
       retryable: err.retryable,
-      action: err.action
+      action: err.action,
+      playbackKeyReady: err.playbackKeyReady,
+      restriction,
+      reason: err.reason,
+      qqCode: err.qqCode,
+      rawMessage,
+      tried
     });
   }
   const message = err instanceof Error ? err.message : String(err);

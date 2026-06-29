@@ -16,3 +16,17 @@ test("track schema parses unified provider track", () => {
   });
   expect(track.provider).toBe("netease");
 });
+
+test("track schema preserves optional QQ media mid without requiring it", () => {
+  const track = TrackSchema.parse({
+    provider: "qq",
+    id: "song-mid",
+    sourceId: "song-mid",
+    mediaMid: "media-mid",
+    title: "Song",
+    artists: [],
+    qualityHints: []
+  });
+
+  expect(track.mediaMid).toBe("media-mid");
+});

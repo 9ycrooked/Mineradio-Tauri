@@ -121,7 +121,27 @@ async function loginStatusOf(deps: NeteaseHanaDeps): Promise<ProviderLoginStatus
   const avatarUrl = typeof profile.avatarUrl === "string" ? profile.avatarUrl : undefined;
   const userId =
     profile.userId != null ? String(profile.userId) : undefined;
-  return { provider: "netease", loggedIn: true, nickname, avatarUrl, userId };
+  const vipType = typeof profile.vipType === "number" ? profile.vipType : undefined;
+  const vipLevelRaw = typeof profile.vipLevel === "string" ? profile.vipLevel : undefined;
+  const isVip = typeof profile.isVip === "boolean" ? profile.isVip : undefined;
+  const isSvip = typeof profile.isSvip === "boolean" ? profile.isSvip : undefined;
+  const vipLabel = typeof profile.vipLabel === "string" ? profile.vipLabel : undefined;
+  const vipLevel: "none" | "vip" | "svip" =
+    vipLevelRaw === "svip" || isSvip || (typeof vipType === "number" && vipType >= 10) ? "svip" :
+    vipLevelRaw === "vip" || isVip || (typeof vipType === "number" && vipType > 0) ? "vip" :
+    "none";
+  return {
+    provider: "netease",
+    loggedIn: true,
+    nickname,
+    avatarUrl,
+    userId,
+    vipType,
+    vipLevel,
+    isVip,
+    isSvip,
+    vipLabel
+  };
 }
 
 const STATE_TO_CODE: Record<string, string> = {
@@ -133,6 +153,37 @@ const STATE_TO_CODE: Record<string, string> = {
   unavailable: "UNAVAILABLE",
   unknown: "UNAVAILABLE"
 };
+
+function neteaseRestriction(
+  category: "login_required" | "vip_required" | "paid_required" | "trial_only" | "copyright_unavailable" | "url_unavailable",
+  message: string,
+  action: string,
+  extra?: { code?: number; fee?: number },
+) {
+  return {
+    provider: "netease",
+    category,
+    action,
+    message,
+    ...(extra ?? {})
+  };
+}
+
+function neteaseTrialMessage(loggedIn: boolean, vipLevel: "none" | "vip" | "svip"): string {
+  if (loggedIn && vipLevel === "svip") return "此歌曲需要单曲、专辑购买或更高权限";
+  if (loggedIn && vipLevel === "vip") return "此歌曲需要 SVIP 或购买 · 当前仅播放试听片段";
+  if (loggedIn) return "此歌曲需 VIP · 当前仅播放试听片段";
+  return "当前未登录 · 仅播放试听片段";
+}
+
+async function neteaseTrialLoginStatus(deps: NeteaseHanaDeps): Promise<ProviderLoginStatus> {
+  if (!deps.getConfig().cookie) return { provider: "netease", loggedIn: false, vipLevel: "none" };
+  try {
+    return await loginStatusOf(deps);
+  } catch {
+    return { provider: "netease", loggedIn: true, vipLevel: "none" };
+  }
+}
 
 type NeteaseQualityCandidate = {
   level: PlaybackQuality;
@@ -248,15 +299,46 @@ export function createNeteaseAdapter(
           lastState = state;
           if (state !== "playable" || !url) continue;
           const br = typeof datum.br === "number" && Number.isFinite(datum.br) ? Math.max(0, Math.floor(datum.br)) : undefined;
+          const trial = freeTrialInfo != null;
+          const trialLoginStatus = trial
+            ? await neteaseTrialLoginStatus(deps)
+            : { provider: "netease" as const, loggedIn: !!cfg.cookie, vipLevel: "none" as const };
+          const loggedIn = trialLoginStatus.loggedIn;
+          const vipLevel = trialLoginStatus.vipLevel ?? "none";
+          const restriction = trial
+            ? neteaseRestriction(
+                "trial_only",
+                "网易云仅返回试听片段，完整播放需要会员或购买",
+                "upgrade",
+                {
+                  code: typeof code === "number" ? code : undefined,
+                  fee: typeof fee === "number" ? fee : undefined
+                }
+              )
+            : undefined;
           const result = {
             url,
             proxied: false,
+            provider: "netease",
+            trial,
+            playable: true,
             level: quality.level,
             quality: quality.label,
             br,
-            requestedQuality: requested
+            requestedQuality: requested,
+            loggedIn,
+            vipLevel,
+            vipType: trialLoginStatus.vipType,
+            isVip: trialLoginStatus.isVip,
+            isSvip: trialLoginStatus.isSvip,
+            vipLabel: trialLoginStatus.vipLabel,
+            ...(restriction ? {
+              restriction,
+              reason: "trial_only" as const,
+              message: neteaseTrialMessage(loggedIn, vipLevel)
+            } : {})
           };
-          if (freeTrialInfo != null) {
+          if (trial) {
             trialFallback ??= result;
             continue;
           }

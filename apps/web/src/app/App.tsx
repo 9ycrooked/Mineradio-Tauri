@@ -87,6 +87,7 @@ import {
   type PodcastCollection,
   type ProviderId,
   type ProviderLoginStatus,
+  type SongUrlResult,
   type Track,
 } from "@mineradio/shared";
 import type { FxState } from "@mineradio/visual-engine";
@@ -175,6 +176,12 @@ interface CurrentBeatMapState {
   map: JsonValue;
 }
 
+interface TrialBannerState {
+  text: string;
+  provider: ProviderId;
+  showLogin: boolean;
+}
+
 const DESKTOP_LYRIC_FONT_STACKS: Record<string, string> = {
   sans: 'Inter,"Noto Sans SC","PingFang SC","Microsoft YaHei",Arial,sans-serif',
   hei: '"Noto Sans SC","Microsoft YaHei",SimHei,"PingFang SC",sans-serif',
@@ -231,6 +238,16 @@ function trackTitle(track: Track | null | undefined): string {
 
 function trackArtist(track: Track | null | undefined): string {
   return track?.artists?.join(" / ") || track?.album || "";
+}
+
+function trialBannerText(result: SongUrlResult): string {
+  if (result.message?.trim()) return result.message.trim();
+  if (result.loggedIn && result.vipLevel === "svip")
+    return "此歌曲需要单曲、专辑购买或更高权限";
+  if (result.loggedIn && result.vipLevel === "vip")
+    return "此歌曲需要 SVIP 或购买 · 当前仅播放试听片段";
+  if (result.loggedIn) return "此歌曲需 VIP · 当前仅播放试听片段";
+  return "当前未登录 · 仅播放试听片段";
 }
 
 function toJsonValue(value: unknown): JsonValue | null {
@@ -493,6 +510,7 @@ export function App({
   );
   const [currentBeatMapState, setCurrentBeatMapState] =
     useState<CurrentBeatMapState | null>(null);
+  const [trialBanner, setTrialBanner] = useState<TrialBannerState | null>(null);
   const [sidecarBaseUrl, setSidecarBaseUrl] = useState("");
   const [splashActive, setSplashActive] = useState<boolean>(SHOW_SPLASH);
   const [loginModalOpen, setLoginModalOpen] = useState(false);
@@ -1766,6 +1784,7 @@ export function App({
     });
     controller.on("error", (payload) => {
       const message = payload.message || "音频播放失败";
+      setTrialBanner(null);
       setSearchError(message);
       showToast(message);
       console.warn("audio playback failed", {
@@ -1794,6 +1813,7 @@ export function App({
       lastLoadedKeyRef.current = "";
       playbackRequestSeqRef.current += 1;
       setCurrentBeatMapState(null);
+      setTrialBanner(null);
       controller.pause();
       lyricsReset();
       return;
@@ -1804,6 +1824,7 @@ export function App({
     const seq = playbackRequestSeqRef.current + 1;
     playbackRequestSeqRef.current = seq;
     setCurrentBeatMapState(null);
+    setTrialBanner(null);
     const fallbackLyric = buildTrackLyricFallback(currentTrack);
     originalLyricsPayloadRef.current = fallbackLyric;
     const resolvedFallbackLyric = resolveLyricsForTrack({
@@ -1821,9 +1842,21 @@ export function App({
           playbackQuality,
         );
         if (playbackRequestSeqRef.current !== seq) return;
+        if (!result.url) {
+          throw new Error(result.message || "播放地址不可用");
+        }
         const audioUrl = result.proxied
           ? result.url
           : client.audioProxyUrl(result.url);
+        if (result.trial) {
+          setTrialBanner({
+            text: trialBannerText(result),
+            provider: currentTrack.provider,
+            showLogin: !result.loggedIn,
+          });
+        } else {
+          setTrialBanner(null);
+        }
         controller.load(audioUrl);
         const beatmapResolver = client.podcastDjBeatmap?.bind(client);
         if (beatmapResolver && isPodcastTrack(currentTrack)) {
@@ -1860,6 +1893,7 @@ export function App({
         if (playbackRequestSeqRef.current !== seq) return;
         const code = e instanceof SidecarClientError ? e.code : "AUDIO_UNKNOWN";
         const message = e instanceof Error ? e.message : "playback error";
+        setTrialBanner(null);
         setPlaying(false);
         setSearchError(message);
         showToast(message);
@@ -2373,6 +2407,44 @@ export function App({
           </div>
         </div>
       ) : null}
+      <div
+        id="trial-banner"
+        className={trialBanner ? "show" : ""}
+        data-provider={trialBanner?.provider ?? ""}
+      >
+        <svg
+          className="ic"
+          width="16"
+          height="16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" y1="8" x2="12" y2="12" />
+          <line x1="12" y1="16" x2="12.01" y2="16" />
+        </svg>
+        <span id="trial-text">{trialBanner?.text ?? "仅播放试听片段"}</span>
+        <button
+          id="trial-login-btn"
+          className="login-link"
+          type="button"
+          style={{ display: trialBanner?.showLogin ? "" : "none" }}
+          onClick={openLoginModal}
+        >
+          扫码登录
+        </button>
+        <button
+          className="close"
+          type="button"
+          aria-label="关闭试听提醒"
+          onClick={() => setTrialBanner(null)}
+        >
+          ×
+        </button>
+      </div>
       <div
         id="toast"
         className={toast ? "show" : ""}

@@ -54,6 +54,12 @@ export interface SidecarClientErrorInit {
 	provider?: string;
 	retryable: boolean;
 	action?: string;
+	playbackKeyReady?: boolean;
+	restriction?: unknown;
+	reason?: string;
+	qqCode?: number;
+	rawMessage?: string;
+	tried?: string[];
 }
 
 export class SidecarClientError extends Error {
@@ -61,6 +67,12 @@ export class SidecarClientError extends Error {
 	readonly provider?: string;
 	readonly retryable: boolean;
 	readonly action?: string;
+	readonly playbackKeyReady?: boolean;
+	readonly restriction?: unknown;
+	readonly reason?: string;
+	readonly qqCode?: number;
+	readonly rawMessage?: string;
+	readonly tried?: string[];
 
 	constructor(init: SidecarClientErrorInit) {
 		super(init.message);
@@ -69,6 +81,12 @@ export class SidecarClientError extends Error {
 		this.provider = init.provider;
 		this.retryable = init.retryable;
 		this.action = init.action;
+		this.playbackKeyReady = init.playbackKeyReady;
+		this.restriction = init.restriction;
+		this.reason = init.reason;
+		this.qqCode = init.qqCode;
+		this.rawMessage = init.rawMessage;
+		this.tried = init.tried;
 	}
 }
 
@@ -93,6 +111,12 @@ function throwFailureEnvelope(json: unknown): never | void {
 		provider: failure.data.error.provider,
 		retryable: failure.data.error.retryable,
 		action: failure.data.error.action,
+		playbackKeyReady: failure.data.error.playbackKeyReady,
+		restriction: failure.data.error.restriction,
+		reason: failure.data.error.reason,
+		qqCode: failure.data.error.qqCode,
+		rawMessage: failure.data.error.rawMessage,
+		tried: failure.data.error.tried,
 	});
 }
 

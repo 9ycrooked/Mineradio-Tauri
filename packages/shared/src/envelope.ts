@@ -1,11 +1,18 @@
 import { z } from "zod";
+import { PlaybackRestrictionCategorySchema, PlaybackRestrictionSchema } from "./song-url";
 
 export const ApiErrorSchema = z.object({
   code: z.string().min(1),
   message: z.string().min(1),
   provider: z.string().optional(),
   retryable: z.boolean(),
-  action: z.string().optional()
+  action: z.string().optional(),
+  playbackKeyReady: z.boolean().optional(),
+  restriction: PlaybackRestrictionSchema.optional(),
+  reason: PlaybackRestrictionCategorySchema.optional(),
+  qqCode: z.number().optional(),
+  rawMessage: z.string().optional(),
+  tried: z.array(z.string()).optional()
 });
 
 export const ApiFailureSchema = z.object({

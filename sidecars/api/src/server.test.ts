@@ -464,7 +464,15 @@ test("provider route redacts sensitive ProviderError messages while preserving e
     async songUrl() {
       throw new ProviderError("qq", "LOGIN_REQUIRED", sensitiveMessage, {
         retryable: true,
-        action: "login"
+        action: "login",
+        rawMessage: sensitiveMessage,
+        restriction: {
+          provider: "qq",
+          category: "login_required",
+          action: "login",
+          message: sensitiveMessage,
+          rawMessage: sensitiveMessage
+        }
       });
     }
   };
@@ -487,7 +495,81 @@ test("provider route redacts sensitive ProviderError messages while preserving e
   expect(b.error.retryable).toBe(true);
   expect(b.error.action).toBe("login");
   expect(b.error.message).toBe("provider error redacted");
+  expect(b.error.rawMessage).toBe("provider error redacted");
+  expect(b.error.restriction.message).toBe("provider error redacted");
+  expect(b.error.restriction.rawMessage).toBe("provider error redacted");
   const serialized = JSON.stringify(b);
+  expect(serialized).not.toContain("qqmusic_key");
+  expect(serialized).not.toContain("secret");
+});
+
+test("provider route does not serialize extra ProviderError restriction fields", async () => {
+  const fakeQq: ProviderAdapter = {
+    ...providers.qq,
+    async songUrl() {
+      throw new ProviderError("qq", "LOGIN_REQUIRED", "login required", {
+        retryable: true,
+        action: "login",
+        restriction: {
+          provider: "qq",
+          category: "login_required",
+          action: "login",
+          message: "login required",
+          internalCookie: "qqmusic_key=secret"
+        } as any
+      });
+    }
+  };
+  const handler = createRouteHandler({
+    providerAdapters: { ...providers, qq: fakeQq }
+  });
+
+  const r = await handler(
+    new Request("http://127.0.0.1/providers/qq/song-url", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ provider: "qq", id: "1", sourceId: "1", title: "t", artists: [] })
+    })
+  );
+
+  const b = await body(r);
+  expect(b.error.restriction).toEqual({
+    provider: "qq",
+    category: "login_required",
+    action: "login",
+    message: "login required"
+  });
+  const serialized = JSON.stringify(b);
+  expect(serialized).not.toContain("internalCookie");
+  expect(serialized).not.toContain("qqmusic_key");
+  expect(serialized).not.toContain("secret");
+});
+
+test("provider route redacts sensitive ProviderError tried entries", async () => {
+  const fakeQq: ProviderAdapter = {
+    ...providers.qq,
+    async songUrl() {
+      throw new ProviderError("qq", "NO_URL", "no url", {
+        tried: ["standard", "Bearer secret-token", "qqmusic_key=secret"]
+      });
+    }
+  };
+  const handler = createRouteHandler({
+    providerAdapters: { ...providers, qq: fakeQq }
+  });
+
+  const r = await handler(
+    new Request("http://127.0.0.1/providers/qq/song-url", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ provider: "qq", id: "1", sourceId: "1", title: "t", artists: [] })
+    })
+  );
+
+  const b = await body(r);
+  expect(b.error.tried).toEqual(["standard", "provider error redacted", "provider error redacted"]);
+  const serialized = JSON.stringify(b);
+  expect(serialized).not.toContain("secret-token");
   expect(serialized).not.toContain("qqmusic_key");
   expect(serialized).not.toContain("secret");
 });

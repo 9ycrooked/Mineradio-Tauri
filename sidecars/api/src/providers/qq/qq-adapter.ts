@@ -183,6 +183,12 @@ function qqUserIdFromCookie(cookie: string): string | null {
   return digits.length > 0 ? digits : null;
 }
 
+function qqPlaybackKeyFromCookie(cookie: string): string {
+  const obj = parseCookieText(cookie);
+  return obj.qm_keyst || obj.qqmusic_key || obj.music_key || obj.p_skey || obj.skey ||
+    obj.psrf_qqaccess_token || obj.psrf_qqrefresh_token || obj.wxrefresh_token || obj.wxskey || "";
+}
+
 function readQqPlaylistList(body: unknown): unknown[] {
   const root = asObj(body);
   if (!root) return [];
@@ -225,18 +231,129 @@ type QqQualityCandidate = {
   type: string;
   level: PlaybackQuality;
   label: string;
+  prefix: string;
+  ext: string;
 };
 
 const QQ_QUALITY_CANDIDATES: QqQualityCandidate[] = [
-  { type: "flac", level: "lossless", label: "无损 FLAC" },
-  { type: "320", level: "exhigh", label: "320k MP3" },
-  { type: "128", level: "standard", label: "128k MP3" },
+  { type: "flac", level: "lossless", label: "无损 FLAC", prefix: "F000", ext: ".flac" },
+  { type: "320", level: "exhigh", label: "320k MP3", prefix: "M800", ext: ".mp3" },
+  { type: "128", level: "standard", label: "128k MP3", prefix: "M500", ext: ".mp3" },
 ];
 
 function qqQualityCandidatesFrom(requested: PlaybackQuality): QqQualityCandidate[] {
   if (requested === "standard") return QQ_QUALITY_CANDIDATES.slice(2);
   if (requested === "exhigh") return QQ_QUALITY_CANDIDATES.slice(1);
   return QQ_QUALITY_CANDIDATES;
+}
+
+function qqFilenameFor(track: Track, quality: QqQualityCandidate): string {
+  return `${quality.prefix}${track.mediaMid || track.sourceId}${quality.ext}`;
+}
+
+function qqResponseData(body: unknown): Record<string, unknown> | null {
+  const obj = asObj(body);
+  if (!obj) return null;
+  const req0 = asObj(obj.req_0);
+  const req0Data = asObj(req0?.data);
+  if (req0Data) return req0Data;
+  return asObj(obj.data);
+}
+
+function qqSongUrlInfo(body: unknown): { url: string; filename?: string; info?: Record<string, unknown> } {
+  if (typeof body === "string") return { url: body };
+  const obj = asObj(body);
+  if (!obj) return { url: "" };
+  const direct = obj.url ?? obj.purl;
+  if (typeof direct === "string" && direct.trim()) {
+    if (/^https?:\/\//i.test(direct)) return { url: direct };
+    const sip = typeof obj.sip === "string" ? obj.sip : "";
+    return { url: sip ? `${sip}${direct}` : direct };
+  }
+  const data = qqResponseData(obj);
+  if (data) {
+    const infos = Array.isArray(data.midurlinfo) ? data.midurlinfo.map(asObj).filter(Boolean) as Record<string, unknown>[] : [];
+    const info = infos.find(item => typeof item.purl === "string" && item.purl.trim()) ?? infos[0];
+    const purl = typeof info?.purl === "string" ? info.purl.trim() : "";
+    if (purl) {
+      const sipList = Array.isArray(data.sip) ? data.sip : [];
+      const sip = typeof sipList[0] === "string" ? sipList[0] : "https://ws.stream.qqmusic.qq.com/";
+      return {
+        url: /^https?:\/\//i.test(purl) ? purl : `${sip}${purl}`,
+        filename: typeof info?.filename === "string" ? info.filename : undefined,
+        info
+      };
+    }
+    if (info) return { url: "", info };
+    if (data !== obj) return qqSongUrlInfo(data);
+  }
+  return { url: "" };
+}
+
+function qqRestrictionInfo(body: unknown, session: { hasSession: boolean; hasPlaybackKey: boolean }, info?: Record<string, unknown>) {
+  const obj = info ?? qqSongUrlInfo(body).info ?? qqResponseData(body) ?? asObj(body) ?? {};
+  const rawMsg = String(obj.msg ?? obj.tips ?? obj.errmsg ?? obj.message ?? "").trim();
+  const codeRaw = obj.result ?? obj.code ?? obj.errtype;
+  const code = typeof codeRaw === "number" ? codeRaw : Number(codeRaw) || 0;
+  const lower = rawMsg.toLowerCase();
+  if (!session.hasSession) {
+    return {
+      code: "LOGIN_REQUIRED",
+      category: "login_required" as const,
+      retryable: true,
+      action: "login",
+      message: "QQ 音乐需要登录或授权后才能获取播放地址",
+      qqCode: code || undefined,
+      rawMessage: rawMsg || undefined,
+      missingPlaybackKey: !session.hasPlaybackKey
+    };
+  }
+  if (!session.hasPlaybackKey && code === 104003) {
+    return {
+      code: "LOGIN_REQUIRED",
+      category: "login_required" as const,
+      retryable: true,
+      action: "login",
+      message: "QQ 音乐当前只拿到了网页登录状态，还缺少播放授权，请重新打开官方 QQ 音乐登录窗口完成授权",
+      qqCode: code,
+      rawMessage: rawMsg || undefined,
+      missingPlaybackKey: true
+    };
+  }
+  if (code === 104003) {
+    return {
+      code: "COPYRIGHT_UNAVAILABLE",
+      category: "copyright_unavailable" as const,
+      retryable: false,
+      action: "switch_source",
+      message: "QQ 音乐没有给当前版本返回播放地址，通常是版权、会员或官方版本限制，可以换一个搜索结果或切到网易云源",
+      qqCode: code,
+      rawMessage: rawMsg || undefined
+    };
+  }
+  if (/vip|会员|付费|购买|数字专辑|专辑|pay/.test(lower + rawMsg)) {
+    return {
+      code: "PAID_REQUIRED",
+      category: "paid_required" as const,
+      retryable: false,
+      action: "upgrade",
+      message: "QQ 音乐歌曲需要会员、购买或数字专辑权限",
+      qqCode: code || undefined,
+      rawMessage: rawMsg || undefined
+    };
+  }
+  if (code && code !== 0) {
+    return {
+      code: "COPYRIGHT_UNAVAILABLE",
+      category: "copyright_unavailable" as const,
+      retryable: false,
+      action: "switch_source",
+      message: rawMsg || "QQ 音乐版权暂不可播或仅官方客户端可播",
+      qqCode: code,
+      rawMessage: rawMsg || undefined
+    };
+  }
+  return null;
 }
 
 export function createQqAdapter(
@@ -262,23 +379,63 @@ export function createQqAdapter(
     },
     async songUrl(track, opts): Promise<SongUrlResult> {
       const cfg = cfgOf(deps);
-      const hasCookie = !!deps.getConfig().cookie;
+      const cookie = deps.getConfig().cookie ?? "";
+      const hasCookie = !!cookie;
+      const hasPlaybackKey = !!qqPlaybackKeyFromCookie(cookie);
       const requested = opts?.quality ?? "hires";
       let lastError: unknown = null;
-      for (const quality of qqQualityCandidatesFrom(requested)) {
+      const candidates = qqQualityCandidatesFrom(requested);
+      const tried: string[] = candidates.map(quality => `${quality.label} · ${qqFilenameFor(track, quality)}`);
+      for (const quality of candidates) {
         try {
-          const body = (await deps.songUrl({ id: track.sourceId, type: quality.type }, cfg)).body;
-          const url = typeof body === "string" ? body : null;
+          const filename = qqFilenameFor(track, quality);
+          const body = (await deps.songUrl({ id: track.sourceId, type: quality.type, filename }, cfg)).body;
+          const info = qqSongUrlInfo(body);
+          const url = info.url;
           if (url) {
             return {
               url,
               proxied: false,
+              provider: "qq",
+              trial: false,
+              playable: true,
               level: quality.level,
               quality: quality.label,
+              filename: info.filename ?? filename,
               requestedQuality: requested
             };
           }
+          const restriction = qqRestrictionInfo(body, {
+            hasSession: hasCookie,
+            hasPlaybackKey
+          }, info.info);
+          if (restriction) {
+            throw new ProviderError(
+              "qq",
+              restriction.code,
+              restriction.message,
+              {
+                retryable: restriction.retryable,
+                action: restriction.action,
+                playbackKeyReady: hasPlaybackKey,
+                reason: restriction.category,
+                qqCode: restriction.qqCode,
+                rawMessage: restriction.rawMessage,
+                tried,
+                restriction: {
+                  provider: "qq",
+                  category: restriction.category,
+                  action: restriction.action,
+                  message: restriction.message,
+                  code: restriction.qqCode,
+                  rawMessage: restriction.rawMessage,
+                  missingPlaybackKey: restriction.missingPlaybackKey
+                }
+              }
+            );
+          }
         } catch (err) {
+          if (err instanceof ProviderError) throw err;
           if (!hasCookie) {
             throw new ProviderError(
               "qq",
