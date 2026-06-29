@@ -123,6 +123,8 @@ This plan supersedes using the old master implementation plan as a direct execut
 
 **Goal:** After splash dismissal, the Tauri app must show the same baseline startup shell: Empty Home, search peek, top-right commands, bottom handle, and bottom console behavior.
 
+> 2026-06-30 execution status: Phase 1 is code-side complete for current migration execution. Existing implementation and automated verification cover Steps 1-7; screenshots/recordings are explicitly non-blocking for phase progression under the current user directive, but remain required release/parity evidence and do not close capability checklist gates by themselves.
+
 **Files:**
 
 - Modify: `apps/web/src/app/App.tsx`
@@ -144,7 +146,7 @@ This plan supersedes using the old master implementation plan as a direct execut
 - Bottom controls: `public/index.html` `#bottom-handle`, `#bottom-bar`, `revealBottomControls`, `hideBottomControls`, `openHomePlayerConsole`.
 - State machine: `public/index.html` `shouldShowEmptyHomeCore`, `updateEmptyHomeVisibility`, `setSearchAreaPeek`.
 
-- [ ] **Step 1: Add failing App shell contract tests**
+- [x] **Step 1: Add failing App shell contract tests**
 
   Tests must assert that after splash is dismissed the DOM contains `#empty-home`, `#search-area`, `#top-right`, `#bottom-handle`, and `#bottom-bar`. Tests must assert that `body.empty-home-active` is present only when playback/queue/immersive/shelf-detail conditions allow it.
 
@@ -157,27 +159,27 @@ This plan supersedes using the old master implementation plan as a direct execut
 
   Expected before implementation: tests fail because the shell elements or body classes are missing.
 
-- [ ] **Step 2: Restore baseline shell mounts**
+- [x] **Step 2: Restore baseline shell mounts**
 
   Mount baseline-equivalent hosts in `App.tsx` in this order: `SplashHost`, `VisualEngineHost`, `EmptyHomeHost`, search area, top-right controls, bottom handle, bottom player console. The z-index order must match Electron behavior: splash above all, Home above visual host, search/top-right/bottom controls interactive above Home where baseline allows.
 
-- [ ] **Step 3: Restore Empty Home DOM and CSS**
+- [x] **Step 3: Restore Empty Home DOM and CSS**
 
   Replace the current "我的音乐库" static surface with the baseline current structure: left construction hero containing "🚧此处施工，敬请期待🚧" and "展开播放器控制台", right six cards, and rail tiles. Copy only the required CSS constants and layout rules from `public/index.html`, preserving responsive top/bottom/width behavior.
 
-- [ ] **Step 4: Implement Empty Home state machine**
+- [x] **Step 4: Implement Empty Home state machine**
 
   Add a React/Zustand state selector equivalent to baseline `shouldShowEmptyHomeCore`: hide Home when splash is active, current playback exists, queue exists, immersive mode is active, shelf detail is open, or shelf side is pinned where baseline hides it. Apply `body.empty-home-active` and `body.controls-visible` from state.
 
-- [ ] **Step 5: Implement bottom control reveal parity**
+- [x] **Step 5: Implement bottom control reveal parity**
 
   Connect the Home "展开播放器控制台" button, bottom hot zone, and bottom handle to the player console reveal/hide state. When visible, adjust Home bottom spacing through `controls-visible`.
 
-- [ ] **Step 6: Implement search peek shell parity**
+- [x] **Step 6: Implement search peek shell parity**
 
   Render the search shell in baseline peek state on Empty Home. Empty queries show history/recommendations. Focus, blur, Escape, and Home-active behavior must follow baseline rules before adding provider search details.
 
-- [ ] **Step 7: Verify phase**
+- [x] **Step 7: Verify phase**
 
   Run:
 
@@ -191,6 +193,8 @@ This plan supersedes using the old master implementation plan as a direct execut
   Expected: tests and build pass.
 
 - [ ] **Step 8: Manual WebView2 evidence**
+
+  2026-06-30 note: this evidence remains required for final release/parity sign-off, but screenshots/recordings are not a blocker for current phase progression per user instruction.
 
   Run the app and capture screenshots at 1280x720 and 1920x1080:
 
