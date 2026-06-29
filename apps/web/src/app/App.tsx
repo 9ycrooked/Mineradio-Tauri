@@ -122,6 +122,7 @@ const SIDECAR_STATUS_POLL_MS = 1500;
 const SIDECAR_RECOVERED_NOTICE_MS = 2600;
 const PLAYBACK_QUALITY_STORE_KEY = "mineradio-playback-quality-v1";
 const HOME_LISTEN_STATS_STORE_KEY = "mineradio-listen-stats-v1";
+const USER_CAPSULE_AUTO_HIDE_STORE_KEY = "mineradio-user-capsule-auto-hide-v1";
 const DEFAULT_GLOBAL_HOTKEYS: GlobalHotkeyBinding[] = [
   { action: "togglePlay", accelerator: "Control+Alt+Space" },
   { action: "prevTrack", accelerator: "Control+Alt+ArrowLeft" },
@@ -173,6 +174,25 @@ function readPlaybackQualityPreference(): PlaybackQuality {
 function savePlaybackQualityPreference(quality: PlaybackQuality): void {
   if (typeof localStorage === "undefined") return;
   localStorage.setItem(PLAYBACK_QUALITY_STORE_KEY, quality);
+}
+
+function readBooleanPreference(key: string, fallback = false): boolean {
+  if (typeof localStorage === "undefined") return fallback;
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw === null) return fallback;
+    return raw === "1";
+  } catch {
+    return fallback;
+  }
+}
+
+function saveBooleanPreference(key: string, value: boolean): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(key, value ? "1" : "0");
+  } catch {
+  }
 }
 
 function clampNumber(value: number, min: number, max: number): number {
@@ -734,6 +754,10 @@ export function App({
   const [playbackQuality, setPlaybackQualityState] = useState<PlaybackQuality>(
     readPlaybackQualityPreference,
   );
+  const [userCapsuleAutoHide, setUserCapsuleAutoHide] = useState(() =>
+    readBooleanPreference(USER_CAPSULE_AUTO_HIDE_STORE_KEY, false),
+  );
+  const [userCapsulePeek, setUserCapsulePeek] = useState(false);
   const [playbackQualityReloadSeq, setPlaybackQualityReloadSeq] = useState(0);
   const [customLyricModalOpen, setCustomLyricModalOpen] = useState(false);
   const [customLyricText, setCustomLyricText] = useState("");
@@ -945,6 +969,14 @@ export function App({
     },
     [showToast],
   );
+
+  const toggleUserCapsuleAutoHide = useCallback(() => {
+    const next = !userCapsuleAutoHide;
+    saveBooleanPreference(USER_CAPSULE_AUTO_HIDE_STORE_KEY, next);
+    setUserCapsuleAutoHide(next);
+    if (!next) setUserCapsulePeek(false);
+    showToast(next ? "账号胶囊已自动隐藏" : "账号胶囊已固定显示");
+  }, [showToast, userCapsuleAutoHide]);
 
   const patchCustomCoverTrack = useCallback((target: Track, nextTrack: Track) => {
     const key = customCoverKeyForTrack(target);
@@ -2236,6 +2268,8 @@ export function App({
     document.body.classList.toggle("controls-visible", consoleVisible);
     document.body.classList.toggle("home-wallpaper-preview", emptyHomeActive);
     document.body.classList.toggle("home-controls-locked", homeControlsLocked);
+    document.body.classList.toggle("user-capsule-auto-hide", userCapsuleAutoHide);
+    document.body.classList.toggle("user-capsule-peek", userCapsuleAutoHide && userCapsulePeek);
     return () => {
       document.body.classList.remove(
         "splash-active",
@@ -2243,9 +2277,36 @@ export function App({
         "controls-visible",
         "home-wallpaper-preview",
         "home-controls-locked",
+        "user-capsule-auto-hide",
+        "user-capsule-peek",
       );
     };
-  }, [consoleVisible, emptyHomeActive, homeControlsLocked, splashActive]);
+  }, [
+    consoleVisible,
+    emptyHomeActive,
+    homeControlsLocked,
+    splashActive,
+    userCapsuleAutoHide,
+    userCapsulePeek,
+  ]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!userCapsuleAutoHide) {
+      setUserCapsulePeek(false);
+      return;
+    }
+    const updateFromPointer = (event: MouseEvent) => {
+      setUserCapsulePeek(event.clientX > window.innerWidth - 112 && event.clientY < 126);
+    };
+    const clearPeek = () => setUserCapsulePeek(false);
+    window.addEventListener("mousemove", updateFromPointer);
+    window.addEventListener("mouseleave", clearPeek);
+    return () => {
+      window.removeEventListener("mousemove", updateFromPointer);
+      window.removeEventListener("mouseleave", clearPeek);
+    };
+  }, [userCapsuleAutoHide]);
 
   useEffect(() => {
     const settings = loadShelfSettingsFromStorage();
@@ -2865,9 +2926,8 @@ export function App({
       <TopRightControls
         onHome={goHome}
         onLogin={openLoginModal}
-        onHideCapsule={() =>
-          showUnavailable("账号胶囊自动隐藏已记录，登录完成后生效")
-        }
+        onHideCapsule={toggleUserCapsuleAutoHide}
+        capsuleAutoHide={userCapsuleAutoHide}
         loggedIn={!!neteaseStatus?.loggedIn || !!qqStatus?.loggedIn}
         accountLabel={
           neteaseStatus?.nickname ??

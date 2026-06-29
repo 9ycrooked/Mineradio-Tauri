@@ -1211,9 +1211,43 @@ body.empty-home-active #home-btn {
   cursor: pointer;
 }
 
-#top-right:hover .user-capsule-hide-btn {
+#top-right:hover .user-capsule-hide-btn,
+.user-capsule-hide-btn.on {
   opacity: 1;
   transform: translateX(0) scale(1);
+}
+
+.user-capsule-hide-btn:hover,
+.user-capsule-hide-btn.on {
+  border-color: rgba(var(--fc-accent-rgb), .34);
+  background: rgba(var(--fc-accent-rgb), .10);
+  color: #fff;
+}
+
+body.user-capsule-auto-hide #top-right {
+  right: -96px;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: right .28s cubic-bezier(.16, 1, .3, 1), opacity .18s, visibility 0s linear .18s, transform .24s;
+}
+
+body.user-capsule-auto-hide #top-right:hover,
+body.user-capsule-auto-hide.user-capsule-peek #top-right {
+  right: 18px;
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition: right .28s cubic-bezier(.16, 1, .3, 1), opacity .16s, transform .24s;
+}
+
+body.user-capsule-auto-hide #top-right::before {
+  content: "";
+  position: absolute;
+  right: 100%;
+  top: -18px;
+  width: 82px;
+  height: 80px;
 }
 
 #update-shell {

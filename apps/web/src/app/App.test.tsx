@@ -124,6 +124,46 @@ test("App unmounts SplashHost after splash dismissed instead of leaving hidden s
 	host.remove();
 });
 
+test("App mirrors baseline top account capsule auto-hide preference and peek hot-zone", async () => {
+	await import("../../../../packages/visual-engine/src/runtime/happy-dom-preload");
+	(globalThis as unknown as { localStorage: Storage }).localStorage = window.localStorage;
+	localStorage.clear();
+	document.body.className = "";
+	const host = document.createElement("div");
+	document.body.appendChild(host);
+	const root = createRoot(host);
+
+	try {
+		flushSync(() => root.render(<App SplashComponent={() => null} VisualComponent={() => <div id="visual-host" />} />));
+		const toggle = host.querySelector("#user-capsule-hide-btn") as HTMLButtonElement;
+		expect(toggle.textContent).toBe("‹");
+
+		toggle.click();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(localStorage.getItem("mineradio-user-capsule-auto-hide-v1")).toBe("1");
+		expect(document.body.classList.contains("user-capsule-auto-hide")).toBe(true);
+		expect(toggle.textContent).toBe("›");
+		expect(toggle.title).toBe("取消自动隐藏账号胶囊");
+
+		const pointerMove = new Event("mousemove") as Event & { clientX: number; clientY: number };
+		Object.defineProperty(pointerMove, "clientX", { value: window.innerWidth - 12 });
+		Object.defineProperty(pointerMove, "clientY", { value: 30 });
+		flushSync(() => window.dispatchEvent(pointerMove));
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(document.body.classList.contains("user-capsule-peek")).toBe(true);
+
+		toggle.click();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(localStorage.getItem("mineradio-user-capsule-auto-hide-v1")).toBe("0");
+		expect(document.body.classList.contains("user-capsule-auto-hide")).toBe(false);
+	} finally {
+		root.unmount();
+		host.remove();
+		document.body.className = "";
+		localStorage.clear();
+	}
+});
+
 test("Home blank dismiss accepts only empty Home surfaces", async () => {
 	await import("../../../../packages/visual-engine/src/runtime/happy-dom-preload");
 	document.body.innerHTML = `

@@ -4,23 +4,34 @@ export interface TopRightControlsProps {
 	onHome?: () => void;
 	onLogin?: () => void;
 	onHideCapsule?: () => void;
+	capsuleAutoHide?: boolean;
 	loggedIn?: boolean;
 	accountLabel?: string;
 	updateSlot?: ReactNode;
 }
 
-export function TopRightControls({ onHome, onLogin, onHideCapsule, loggedIn = false, accountLabel, updateSlot }: TopRightControlsProps): ReactElement {
+export function TopRightControls({
+	onHome,
+	onLogin,
+	onHideCapsule,
+	capsuleAutoHide = false,
+	loggedIn = false,
+	accountLabel,
+	updateSlot,
+}: TopRightControlsProps): ReactElement {
+	const capsuleTitle = capsuleAutoHide ? "取消自动隐藏账号胶囊" : "自动隐藏账号胶囊";
 	return (
 		<div id="top-right">
 			<button
 				id="user-capsule-hide-btn"
-				className="user-capsule-hide-btn"
+				className={capsuleAutoHide ? "user-capsule-hide-btn on" : "user-capsule-hide-btn"}
 				type="button"
 				onClick={onHideCapsule}
-				title="自动隐藏账号胶囊"
-				aria-label="自动隐藏账号胶囊"
+				title={capsuleTitle}
+				aria-label={capsuleTitle}
+				aria-pressed={capsuleAutoHide}
 			>
-				‹
+				{capsuleAutoHide ? "›" : "‹"}
 			</button>
 			<button
 				id="home-btn"
