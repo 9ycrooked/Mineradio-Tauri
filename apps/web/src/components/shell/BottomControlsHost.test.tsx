@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { createRoot } from "react-dom/client";
+import { flushSync } from "react-dom";
 import React from "react";
 import { BottomControlsHost } from "./BottomControlsHost";
 
@@ -52,4 +53,56 @@ test("BottomControlsHost forwards current heart state and click callback", async
 	expect(calls).toEqual(["like"]);
 	root.unmount();
 	container.remove();
+});
+
+test("BottomControlsHost mirrors baseline bottom handle wake and auto-hide hover timing", async () => {
+	await import("../../../../../packages/visual-engine/src/runtime/happy-dom-preload");
+	document.body.className = "";
+	const calls: string[] = [];
+	const timers: Array<() => void> = [];
+	const cleared: number[] = [];
+	const container = document.createElement("div");
+	document.body.appendChild(container);
+	const root = createRoot(container);
+	flushSync(() => root.render(
+		React.createElement(BottomControlsHost, {
+			visible: false,
+			onReveal: () => calls.push("reveal"),
+			onHide: () => calls.push("hide"),
+			deps: {
+				setTimeoutRef: ((callback: () => void) => {
+					timers.push(callback);
+					return timers.length;
+				}) as typeof window.setTimeout,
+				clearTimeoutRef: ((id: number) => {
+					cleared.push(id);
+				}) as typeof window.clearTimeout,
+			},
+		}),
+	));
+	await new Promise((resolve) => setTimeout(resolve, 0));
+
+	const handle = container.querySelector("#bottom-handle") as HTMLButtonElement;
+	const bar = container.querySelector("#bottom-bar") as HTMLDivElement;
+	handle.dispatchEvent(new window.MouseEvent("mouseenter", { bubbles: true }));
+	expect(calls).toEqual(["reveal"]);
+	expect(document.body.classList.contains("controls-handle-awake")).toBe(true);
+
+	handle.dispatchEvent(new window.MouseEvent("mouseleave", { bubbles: true }));
+	expect(timers.length).toBeGreaterThanOrEqual(2);
+	timers[timers.length - 2]?.();
+	expect(calls).toEqual(["reveal", "hide"]);
+	timers[timers.length - 1]?.();
+	expect(document.body.classList.contains("controls-handle-awake")).toBe(false);
+
+	bar.dispatchEvent(new window.MouseEvent("mouseenter", { bubbles: true }));
+	expect(document.body.classList.contains("controls-handle-awake")).toBe(true);
+	expect(cleared.length).toBeGreaterThan(0);
+	bar.dispatchEvent(new window.MouseEvent("mouseleave", { bubbles: true }));
+	timers[timers.length - 2]?.();
+	expect(calls).toEqual(["reveal", "hide", "hide"]);
+
+	root.unmount();
+	container.remove();
+	document.body.className = "";
 });

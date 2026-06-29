@@ -1,4 +1,4 @@
-import { type ReactElement } from "react";
+import { useEffect, useRef, type ReactElement } from "react";
 import { PlayerConsoleHost } from "../../visual/PlayerConsoleHost";
 import type { PlaybackMode } from "../../stores/playback-store";
 import type { ShelfCameraMode, ShelfMode, ShelfPresence } from "../../stores/shelf-store";
@@ -7,6 +7,7 @@ import type { PlaybackQuality, Track } from "@mineradio/shared";
 export interface BottomControlsHostProps {
 	visible: boolean;
 	onReveal: () => void;
+	onHide?: () => void;
 	onTogglePlay?: () => void;
 	onPrevious?: () => void;
 	onNext?: () => void;
@@ -56,17 +57,113 @@ export interface BottomControlsHostProps {
 	shelfMergeCollections?: boolean;
 	lyricSourceMode?: "original" | "custom";
 	hasCustomLyric?: boolean;
+	deps?: {
+		setTimeoutRef?: typeof window.setTimeout;
+		clearTimeoutRef?: typeof window.clearTimeout;
+		isSuppressed?: () => boolean;
+		isHomeControlsLocked?: () => boolean;
+	};
 }
 
 export function BottomControlsHost(props: BottomControlsHostProps): ReactElement {
+	const handleRef = useRef<HTMLButtonElement | null>(null);
+	const propsRef = useRef(props);
+	propsRef.current = props;
+
+	useEffect(() => {
+		const handle = handleRef.current;
+		const bar = document.getElementById("bottom-bar");
+		if (!handle || !bar || typeof document === "undefined") return;
+
+		const setTimeoutRef =
+			propsRef.current.deps?.setTimeoutRef ??
+			(typeof window !== "undefined" ? window.setTimeout.bind(window) : undefined);
+		const clearTimeoutRef =
+			propsRef.current.deps?.clearTimeoutRef ??
+			(typeof window !== "undefined" ? window.clearTimeout.bind(window) : undefined);
+		let hideTimer: number | null = null;
+		let handleTimer: number | null = null;
+		let hovering = false;
+
+		const clearHideTimer = () => {
+			if (hideTimer != null && clearTimeoutRef) clearTimeoutRef(hideTimer);
+			hideTimer = null;
+		};
+		const clearHandleTimer = () => {
+			if (handleTimer != null && clearTimeoutRef) clearTimeoutRef(handleTimer);
+			handleTimer = null;
+		};
+		const suppressed = () =>
+			document.body.classList.contains("home-controls-locked") ||
+			propsRef.current.deps?.isHomeControlsLocked?.() ||
+			propsRef.current.deps?.isSuppressed?.();
+		const wakeBottomHandle = (duration = 2000) => {
+			document.body.classList.add("controls-handle-awake");
+			clearHandleTimer();
+			if (!setTimeoutRef) return;
+			handleTimer = setTimeoutRef(() => {
+				handleTimer = null;
+				document.body.classList.remove("controls-handle-awake");
+			}, duration);
+		};
+		const scheduleHide = (delay = 70) => {
+			clearHideTimer();
+			if (!setTimeoutRef) return;
+			hideTimer = setTimeoutRef(() => {
+				hideTimer = null;
+				if (!hovering) propsRef.current.onHide?.();
+			}, delay);
+		};
+		const enterControls = () => {
+			if (suppressed()) return;
+			hovering = true;
+			wakeBottomHandle();
+			clearHideTimer();
+		};
+		const leaveControls = () => {
+			hovering = false;
+			scheduleHide(70);
+			wakeBottomHandle(900);
+		};
+		const enterHandle = () => {
+			if (suppressed()) return;
+			hovering = true;
+			wakeBottomHandle();
+			propsRef.current.onReveal();
+			clearHideTimer();
+		};
+		const clickHandle = (event: MouseEvent) => {
+			event.preventDefault();
+			event.stopPropagation();
+			if (suppressed()) return;
+			propsRef.current.onReveal();
+			wakeBottomHandle(900);
+		};
+
+		bar.addEventListener("mouseenter", enterControls);
+		bar.addEventListener("mouseleave", leaveControls);
+		handle.addEventListener("mouseenter", enterHandle);
+		handle.addEventListener("mouseleave", leaveControls);
+		handle.addEventListener("click", clickHandle);
+		return () => {
+			bar.removeEventListener("mouseenter", enterControls);
+			bar.removeEventListener("mouseleave", leaveControls);
+			handle.removeEventListener("mouseenter", enterHandle);
+			handle.removeEventListener("mouseleave", leaveControls);
+			handle.removeEventListener("click", clickHandle);
+			clearHideTimer();
+			clearHandleTimer();
+			document.body.classList.remove("controls-handle-awake");
+		};
+	}, []);
+
 	return (
 		<>
 			<button
 				id="bottom-handle"
+				ref={handleRef}
 				className={props.visible ? "active" : ""}
 				type="button"
-				onClick={props.onReveal}
-				onPointerEnter={props.onReveal}
 				aria-label="展开播放器控制台"
 				title="展开播放器控制台"
 			>
@@ -124,6 +221,10 @@ export function BottomControlsHost(props: BottomControlsHostProps): ReactElement
 				shelfMergeCollections={props.shelfMergeCollections}
 				lyricSourceMode={props.lyricSourceMode}
 				hasCustomLyric={props.hasCustomLyric}
+				deps={{
+					isHomeControlsLocked: props.deps?.isHomeControlsLocked,
+					isShelfSuppressed: props.deps?.isSuppressed,
+				}}
 			/>
 		</>
 	);
