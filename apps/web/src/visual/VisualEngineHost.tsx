@@ -28,6 +28,8 @@ export interface VisualEngineHostProps {
 	podcastCollections?: PodcastCollection[];
 	currentTrack?: Track | null;
 	currentCoverUrl?: string | null;
+	beatMapKey?: string | null;
+	beatMap?: unknown;
 	sidecarBaseUrl?: string | null;
 	coverResolution?: number;
 	fxDefaults?: Partial<FxState>;
@@ -138,6 +140,9 @@ export function VisualEngineHost(props: VisualEngineHostProps): ReactElement {
 	const shelfItemsVersionRef = useRef<number>(0);
 	const coverUrlRef = useRef<string>(resolveVisualCoverUrlForSidecar(resolveVisualCoverUrl(props.currentCoverUrl, props.currentTrack), props.sidecarBaseUrl));
 	const coverUrlVersionRef = useRef<number>(0);
+	const beatMapKeyRef = useRef<string>(props.beatMapKey ?? "");
+	const beatMapRef = useRef<unknown>(props.beatMap ?? null);
+	const beatMapVersionRef = useRef<number>(0);
 	const splashActiveRef = useRef<boolean>(props.splashActive ?? false);
 	const homeActiveRef = useRef<boolean>(props.homeActive ?? false);
 	const secondaryLeftDisplaySeamGuardRef = useRef<boolean>(props.secondaryLeftDisplaySeamGuardActive ?? false);
@@ -190,6 +195,12 @@ export function VisualEngineHost(props: VisualEngineHostProps): ReactElement {
 	if (coverUrlRef.current !== nextCoverUrl) {
 		coverUrlRef.current = nextCoverUrl;
 		coverUrlVersionRef.current += 1;
+	}
+	const nextBeatMapKey = props.beatMapKey ?? "";
+	if (beatMapKeyRef.current !== nextBeatMapKey || beatMapRef.current !== props.beatMap) {
+		beatMapKeyRef.current = nextBeatMapKey;
+		beatMapRef.current = props.beatMap ?? null;
+		beatMapVersionRef.current += 1;
 	}
 
 	const handleShelfModeChange = useCallback((mode: "side") => {
@@ -246,6 +257,9 @@ export function VisualEngineHost(props: VisualEngineHostProps): ReactElement {
 		shelfItemsVersionRef,
 		coverUrlRef,
 		coverUrlVersionRef,
+		beatMapKeyRef,
+		beatMapRef,
+		beatMapVersionRef,
 		splashActiveRef,
 		homeActiveRef,
 		secondaryLeftDisplaySeamGuardRef,

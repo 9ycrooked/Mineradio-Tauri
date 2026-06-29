@@ -57,6 +57,15 @@ export type {
 } from "./control/control-console-motion";
 
 export { createAudioReactivity } from "./audio/audio-reactivity";
+export {
+	createBeatMapScheduler,
+	normalizeBeatMapEvents,
+} from "./audio/beatmap-scheduler";
+export type {
+	BeatMapScheduler,
+	BeatMapSchedulerDeps,
+	NormalizedBeatMapEvent,
+} from "./audio/beatmap-scheduler";
 export type {
 	AudioSnapshot,
 	AudioFrameBytes,

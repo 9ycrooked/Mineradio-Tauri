@@ -1,6 +1,7 @@
 import { useEffect, useRef, type RefObject } from "react";
 import {
 	createAudioReactivity,
+	createBeatMapScheduler,
 	createCinemaCamera,
 	createConnectorParticles,
 	createHomeVisual,
@@ -71,6 +72,9 @@ export interface VisualEngineRefs {
 	secondaryLeftDisplaySeamGuardRef?: RefObject<boolean>;
 	coverUrlRef?: RefObject<string>;
 	coverUrlVersionRef?: RefObject<number>;
+	beatMapKeyRef?: RefObject<string>;
+	beatMapRef?: RefObject<unknown>;
+	beatMapVersionRef?: RefObject<number>;
 	onShelfPlayQueueIndexRef?: RefObject<((index: number) => void) | undefined>;
 	onShelfDetailRowClickRef?: RefObject<((payload: ShelfDetailRowClickPayload) => void) | undefined>;
 	onShelfOpenDetailContentRef?: RefObject<((payload: ShelfOpenDetailContentPayload, writer: ShelfDetailContentListController) => void) | undefined>;
@@ -522,7 +526,18 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 				reduceMotion: prefersReducedMotion,
 			});
 			let syncedShelfItemsVersion = refs.shelfItemsVersionRef.current;
+			let syncedBeatMapVersion = refs.beatMapVersionRef?.current ?? 0;
 			shelfManager.setData(refs.shelfItemsRef.current);
+			const beatMapScheduler = createBeatMapScheduler({
+				scheduleCameraBeat: (beat) => cinema.applyBeat(Math.max(Number(beat.strength) || 0, Number(beat.impact) || 0), true),
+				triggerScheduledBeat: (beat) => audioEngine.triggerScheduledBeat(beat),
+				setBeatMapReady: (ready) => audioEngine.setBeatMapReady(ready),
+				setWaitingForBeatMap: (waiting) => audioEngine.setWaitingForBeatMap(waiting),
+			});
+			beatMapScheduler.setBeatMap(
+				refs.beatMapKeyRef?.current ?? "",
+				refs.beatMapRef?.current ?? null,
+			);
 			void lifecycle.mount(renderer.scene);
 			refs.lifecycleRef.current = lifecycle;
 			try {
@@ -540,7 +555,15 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 				onCacheTrim: () => {},
 			});
 			const offHomeAudio = renderLoop.registerStep(RenderStepSlot.Ripples, (ctx) => {
+				if (refs.beatMapVersionRef && syncedBeatMapVersion !== refs.beatMapVersionRef.current) {
+					syncedBeatMapVersion = refs.beatMapVersionRef.current;
+					beatMapScheduler.setBeatMap(
+						refs.beatMapKeyRef?.current ?? "",
+						refs.beatMapRef?.current ?? null,
+					);
+				}
 				audioEngine.update(ctx.dt);
+				beatMapScheduler.update((refs.positionRef.current ?? 0) / 1000);
 			});
 			const offHome = renderLoop.registerStep(RenderStepSlot.HomeVisual, (ctx) => {
 				mergeFxState(homeVisual.getFx(), refs.fxRef?.current);
@@ -774,5 +797,5 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 			handles = null;
 			refs.lifecycleRef.current = null;
 		};
-	}, [refs.hostRef, refs.audioElementRef, refs.positionRef, refs.isPlayingRef, refs.lyricLinesRef, refs.shelfItemsRef, refs.shelfItemsVersionRef, refs.splashActiveRef, refs.homeActiveRef, refs.shelfModeRef, refs.shelfCameraModeRef, refs.shelfPresenceRef, refs.shelfMergeCollectionsRef, refs.shelfMineCountRef, refs.shelfFavCountRef, refs.wallpaperSafeRef, refs.secondaryLeftDisplaySeamGuardRef, refs.coverUrlRef, refs.coverUrlVersionRef, refs.onShelfPlayQueueIndexRef, refs.onShelfDetailRowClickRef, refs.onShelfOpenDetailContentRef, refs.onShelfPaneChangeRef, refs.lifecycleRef, refs.coverResolution, refs.onShelfModeChange]);
+	}, [refs.hostRef, refs.audioElementRef, refs.positionRef, refs.isPlayingRef, refs.lyricLinesRef, refs.shelfItemsRef, refs.shelfItemsVersionRef, refs.splashActiveRef, refs.homeActiveRef, refs.shelfModeRef, refs.shelfCameraModeRef, refs.shelfPresenceRef, refs.shelfMergeCollectionsRef, refs.shelfMineCountRef, refs.shelfFavCountRef, refs.wallpaperSafeRef, refs.secondaryLeftDisplaySeamGuardRef, refs.coverUrlRef, refs.coverUrlVersionRef, refs.beatMapKeyRef, refs.beatMapRef, refs.beatMapVersionRef, refs.onShelfPlayQueueIndexRef, refs.onShelfDetailRowClickRef, refs.onShelfOpenDetailContentRef, refs.onShelfPaneChangeRef, refs.lifecycleRef, refs.coverResolution, refs.onShelfModeChange]);
 }

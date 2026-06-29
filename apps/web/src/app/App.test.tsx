@@ -8,6 +8,7 @@ import {
 	applyDesktopWindowShellState,
 	buildDesktopLyricsPayloadPatch,
 	deriveSidecarRecoveryNoticeState,
+	desktopLyricsBeatMapKey,
 	isHomeBlankDismissElement,
 	shouldUseSecondaryLeftDisplaySeamGuard,
 	shouldShowEmptyHome,
@@ -20,6 +21,7 @@ import { CUSTOM_LYRIC_PREF_STORE_KEY, CUSTOM_LYRIC_STORE_KEY } from "../lyrics/c
 import type { SidecarClient } from "../api/sidecar-client";
 import type { VisualEngineHostProps } from "../visual/VisualEngineHost";
 import { cloneFxState } from "@mineradio/visual-engine";
+import type { Track } from "@mineradio/shared";
 
 class AppStubAudioElement extends EventTarget {
 	currentTime = 0;
@@ -276,6 +278,8 @@ test("buildDesktopLyricsPayloadPatch mirrors baseline metadata typography motion
 		beatPulse: 0.9,
 		bass: 0.4,
 		hasNativeKaraoke: true,
+		beatMapKey: "netease:42",
+		beatMap: { kicks: [1.2, 2.4] },
 	});
 
 	expect(payload.title).toBe("Track");
@@ -288,6 +292,8 @@ test("buildDesktopLyricsPayloadPatch mirrors baseline metadata typography motion
 	expect(payload.lineHeight).toBe(1.24);
 	expect(payload.lyricScale).toBe(1.4);
 	expect(payload.feather).toBe(0.03);
+	expect(payload.beatMapKey).toBe("netease:42");
+	expect(payload.beatMap).toEqual({ kicks: [1.2, 2.4] });
 	expect(payload.lyricGlowParticles).toBe(true);
 	expect(payload.cinema).toBe(false);
 	expect(payload.highlightFollow).toBe(true);
@@ -494,6 +500,157 @@ test("App replaces stale lyrics with current track fallback while provider lyric
 		durationMs: 9999000,
 		charCount: 29,
 	});
+
+	root.unmount();
+	host.remove();
+	usePlaybackStore.getState().clearQueue();
+	useLyricsStore.getState().reset();
+	localStorage.clear();
+	restoreAudio();
+});
+
+test("App resolves playback beatmap and forwards it to visual host", async () => {
+	await import("../../../../packages/visual-engine/src/runtime/happy-dom-preload");
+	(globalThis as unknown as { localStorage: Storage }).localStorage = window.localStorage;
+	const restoreAudio = installAppStubAudio();
+	localStorage.clear();
+	usePlaybackStore.getState().clearQueue();
+	useLyricsStore.getState().reset();
+	usePlaybackStore.getState().setCurrentTrack({
+		provider: "netease",
+		id: "beat-1",
+		sourceId: "beat-1",
+		title: "Beat Song",
+		artists: ["Beat Artist"],
+		album: "",
+		coverUrl: "",
+		durationMs: 120000,
+		qualityHints: [],
+		playableState: "unknown",
+		type: "podcast",
+		programId: "program-1",
+	} as unknown as Track);
+
+	const beatmapCalls: unknown[] = [];
+	const map = { cameraBeats: [{ t: 1.2, strength: 0.8 }], analyzedAt: 123, duration: 120, tempoSource: "podcast-dj-offline" };
+	const fakeClient = {
+		async resolveSongUrl() {
+			return { url: "https://example.com/beat.mp3", quality: "standard", proxied: false };
+		},
+		audioProxyUrl(url: string) {
+			return `http://127.0.0.1:39999/audio-proxy?url=${encodeURIComponent(url)}`;
+		},
+		async lyric() {
+			return {
+				provider: "netease",
+				trackId: "beat-1",
+				lines: [],
+				hasTranslation: false,
+				isWordByWord: false,
+			};
+		},
+		async podcastDjBeatmap(url: string, durationSec: number, introSec: number) {
+			beatmapCalls.push({ url, durationSec, introSec });
+			return { ok: true, map };
+		},
+	} as unknown as SidecarClient;
+	const rootConfig: RuntimeConfig = {
+		sidecarBaseUrl: "http://127.0.0.1:39999",
+		appDataDir: "",
+		appVersion: "0.0.0-test",
+		schemaVersion: "0.1.0",
+		updaterPublicKeyConfigured: false,
+	};
+	let latestVisualProps: VisualEngineHostProps | null = null;
+	function MockVisual(props: VisualEngineHostProps) {
+		latestVisualProps = props;
+		return <div id="visual-host" />;
+	}
+	const host = document.createElement("div");
+	document.body.appendChild(host);
+	const root = createRoot(host);
+	flushSync(() => root.render(<App SplashComponent={() => null} VisualComponent={MockVisual} createSidecarClient={() => fakeClient} initialRuntimeConfig={rootConfig} />));
+
+	for (let i = 0; i < 12 && beatmapCalls.length === 0; i += 1) {
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	}
+	for (let i = 0; i < 12 && !(latestVisualProps as unknown as { beatMap?: unknown } | null)?.beatMap; i += 1) {
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	}
+
+	expect(beatmapCalls).toEqual([
+		{ url: "https://example.com/beat.mp3", durationSec: 120, introSec: 0 },
+	]);
+	expect((latestVisualProps as unknown as { beatMapKey?: string })?.beatMapKey).toBe(desktopLyricsBeatMapKey(map, "dj"));
+	expect((latestVisualProps as unknown as { beatMap?: unknown })?.beatMap).toEqual(map);
+
+	root.unmount();
+	host.remove();
+	usePlaybackStore.getState().clearQueue();
+	useLyricsStore.getState().reset();
+	localStorage.clear();
+	restoreAudio();
+});
+
+test("App does not run the podcast DJ beatmap analyzer for ordinary songs", async () => {
+	await import("../../../../packages/visual-engine/src/runtime/happy-dom-preload");
+	(globalThis as unknown as { localStorage: Storage }).localStorage = window.localStorage;
+	const restoreAudio = installAppStubAudio();
+	localStorage.clear();
+	usePlaybackStore.getState().clearQueue();
+	useLyricsStore.getState().reset();
+	usePlaybackStore.getState().setCurrentTrack({
+		provider: "netease",
+		id: "song-1",
+		sourceId: "song-1",
+		title: "Song",
+		artists: ["Artist"],
+		album: "",
+		coverUrl: "",
+		durationMs: 120000,
+		qualityHints: [],
+		playableState: "unknown",
+	});
+
+	const beatmapCalls: unknown[] = [];
+	const fakeClient = {
+		async resolveSongUrl() {
+			return { url: "https://example.com/song.mp3", quality: "standard", proxied: false };
+		},
+		audioProxyUrl(url: string) {
+			return url;
+		},
+		async lyric() {
+			return {
+				provider: "netease",
+				trackId: "song-1",
+				lines: [],
+				hasTranslation: false,
+				isWordByWord: false,
+			};
+		},
+		async podcastDjBeatmap(url: string) {
+			beatmapCalls.push(url);
+			return { ok: true, map: { cameraBeats: [1] } };
+		},
+	} as unknown as SidecarClient;
+	const rootConfig: RuntimeConfig = {
+		sidecarBaseUrl: "http://127.0.0.1:39999",
+		appDataDir: "",
+		appVersion: "0.0.0-test",
+		schemaVersion: "0.1.0",
+		updaterPublicKeyConfigured: false,
+	};
+	const host = document.createElement("div");
+	document.body.appendChild(host);
+	const root = createRoot(host);
+	flushSync(() => root.render(<App SplashComponent={() => null} VisualComponent={() => <div id="visual-host" />} createSidecarClient={() => fakeClient} initialRuntimeConfig={rootConfig} />));
+
+	for (let i = 0; i < 8; i += 1) {
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	}
+
+	expect(beatmapCalls).toEqual([]);
 
 	root.unmount();
 	host.remove();

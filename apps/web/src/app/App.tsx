@@ -47,6 +47,7 @@ import {
   toggleWindowFullscreen,
   updateDesktopLyricsPayload,
   type GlobalHotkeyBinding,
+  type JsonValue,
   type RuntimeConfig,
   type SidecarStatus,
   type WindowState,
@@ -166,6 +167,12 @@ export interface DesktopLyricsPayloadContext {
   bass?: number;
   hasNativeKaraoke?: boolean;
   beatMapKey?: string;
+  beatMap?: JsonValue | null;
+}
+
+interface CurrentBeatMapState {
+  key: string;
+  map: JsonValue;
 }
 
 const DESKTOP_LYRIC_FONT_STACKS: Record<string, string> = {
@@ -226,6 +233,72 @@ function trackArtist(track: Track | null | undefined): string {
   return track?.artists?.join(" / ") || track?.album || "";
 }
 
+function toJsonValue(value: unknown): JsonValue | null {
+  if (value == null) return null;
+  try {
+    return JSON.parse(JSON.stringify(value)) as JsonValue;
+  } catch {
+    return null;
+  }
+}
+
+function isPodcastTrack(track: Track | null | undefined): boolean {
+  const record = track as unknown as Record<string, unknown> | null | undefined;
+  return record?.type === "podcast" || record?.source === "podcast";
+}
+
+function beatMapArrayLength(map: Record<string, JsonValue>, key: string): number {
+  const value = map[key];
+  return Array.isArray(value) ? value.length : 0;
+}
+
+function beatMapNumber(map: Record<string, JsonValue>, key: string): number {
+  const value = map[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function beatMapString(map: Record<string, JsonValue>, key: string, fallback: string): string {
+  const value = map[key];
+  return typeof value === "string" && value ? value : fallback;
+}
+
+export function desktopLyricsBeatMapKey(map: JsonValue | null, source = "mr"): string {
+  if (!map || typeof map !== "object" || Array.isArray(map)) return "none";
+  const record = map as Record<string, JsonValue>;
+  const cameraCount =
+    beatMapArrayLength(record, "cameraBeats") ||
+    beatMapArrayLength(record, "beats") ||
+    beatMapArrayLength(record, "kicks");
+  const pulseCount =
+    beatMapArrayLength(record, "pulseBeats") ||
+    beatMapArrayLength(record, "kicks");
+  const duration = beatMapNumber(record, "duration");
+  const partialUntil = beatMapNumber(record, "partialUntilSec");
+  return [
+    source,
+    beatMapNumber(record, "analyzedAt"),
+    cameraCount,
+    pulseCount,
+    Math.round(duration * 10),
+    Math.round(partialUntil * 10),
+    beatMapString(record, "tempoSource", "local"),
+  ].join("|");
+}
+
+function desktopLyricsBeatMapContext(
+  state: CurrentBeatMapState | null,
+  force: boolean,
+  lastKeyRef: { current: string },
+): Pick<DesktopLyricsPayloadContext, "beatMapKey" | "beatMap"> {
+  const key = state?.key ?? "none";
+  const shouldSendMap = force || key !== lastKeyRef.current;
+  lastKeyRef.current = key;
+  return {
+    beatMapKey: key,
+    ...(shouldSendMap ? { beatMap: state?.map ?? null } : {}),
+  };
+}
+
 export function buildDesktopLyricsPayloadPatch(
   fx: FxState,
   text: string,
@@ -267,6 +340,9 @@ export function buildDesktopLyricsPayloadPatch(
     lyricScale: clampNumber(Number(fx.lyricScale) || 1, 0.35, 1.65),
     feather: context.hasNativeKaraoke ? 0.03 : 0.055,
     beatMapKey: context.beatMapKey || "",
+    ...(Object.prototype.hasOwnProperty.call(context, "beatMap")
+      ? { beatMap: context.beatMap ?? null }
+      : {}),
     colors: {
       primary: desktopOverlayColorValue(fx.lyricColor, "#d6f8ff"),
       secondary: desktopOverlayColorValue(fx.visualTintColor, "#9cffdf"),
@@ -415,6 +491,8 @@ export function App({
   const [sidecarClient, setSidecarClient] = useState<SidecarClient | null>(
     null,
   );
+  const [currentBeatMapState, setCurrentBeatMapState] =
+    useState<CurrentBeatMapState | null>(null);
   const [sidecarBaseUrl, setSidecarBaseUrl] = useState("");
   const [splashActive, setSplashActive] = useState<boolean>(SHOW_SPLASH);
   const [loginModalOpen, setLoginModalOpen] = useState(false);
@@ -522,6 +600,7 @@ export function App({
     null,
   );
   const desktopLyricsPushStateRef = useRef(createDesktopLyricsPushState());
+  const desktopLyricsBeatMapKeyRef = useRef("none");
   const desktopLyricsMotionRef = useRef<DesktopLyricsMotionSnapshot>({
     highBloom: 0,
     beatGlow: 0,
@@ -1284,6 +1363,11 @@ export function App({
     const duration = playback.durationMs ?? 0;
     const snapshot = currentDesktopLyricSnapshot();
     const motion = desktopLyricsMotionRef.current;
+    const beatMapContext = desktopLyricsBeatMapContext(
+      currentBeatMapState,
+      true,
+      desktopLyricsBeatMapKeyRef,
+    );
     const payload = buildDesktopLyricsPayloadPatch(
       useVisualStore.getState().fx,
       snapshot.text,
@@ -1300,6 +1384,7 @@ export function App({
         beatGlow: motion.beatGlow,
         beatPulse: motion.beatPulse,
         bass: motion.bass,
+        ...beatMapContext,
       },
     );
     if (
@@ -1314,7 +1399,7 @@ export function App({
     }
     await showDesktopLyricsWindow();
     setDesktopLyricsEnabled(true);
-  }, [currentDesktopLyricSnapshot, desktopLyricsEnabled]);
+  }, [currentBeatMapState, currentDesktopLyricSnapshot, desktopLyricsEnabled]);
 
   const executeGlobalHotkeyAction = useCallback(
     (action: string) => {
@@ -1460,6 +1545,11 @@ export function App({
     if (!desktopLyricsEnabled) return;
     const snapshot = currentDesktopLyricSnapshot();
     const motion = desktopLyricsMotionRef.current;
+    const beatMapContext = desktopLyricsBeatMapContext(
+      currentBeatMapState,
+      false,
+      desktopLyricsBeatMapKeyRef,
+    );
     const payload = buildDesktopLyricsPayloadPatch(
       visualFx,
       snapshot.text,
@@ -1476,6 +1566,7 @@ export function App({
         beatGlow: motion.beatGlow,
         beatPulse: motion.beatPulse,
         bass: motion.bass,
+        ...beatMapContext,
       },
     );
     if (
@@ -1497,6 +1588,7 @@ export function App({
     isPlaying,
     lyricsPayload,
     positionMs,
+    currentBeatMapState,
     visualFx,
   ]);
 
@@ -1701,6 +1793,7 @@ export function App({
     if (!currentTrack) {
       lastLoadedKeyRef.current = "";
       playbackRequestSeqRef.current += 1;
+      setCurrentBeatMapState(null);
       controller.pause();
       lyricsReset();
       return;
@@ -1710,6 +1803,7 @@ export function App({
     lastLoadedKeyRef.current = key;
     const seq = playbackRequestSeqRef.current + 1;
     playbackRequestSeqRef.current = seq;
+    setCurrentBeatMapState(null);
     const fallbackLyric = buildTrackLyricFallback(currentTrack);
     originalLyricsPayloadRef.current = fallbackLyric;
     const resolvedFallbackLyric = resolveLyricsForTrack({
@@ -1731,6 +1825,32 @@ export function App({
           ? result.url
           : client.audioProxyUrl(result.url);
         controller.load(audioUrl);
+        const beatmapResolver = client.podcastDjBeatmap?.bind(client);
+        if (beatmapResolver && isPodcastTrack(currentTrack)) {
+          void beatmapResolver(
+            result.url,
+            Math.max(
+              0,
+              Number(
+                currentTrack.durationMs ??
+                  usePlaybackStore.getState().durationMs ??
+                  0,
+              ) / 1000,
+            ),
+            0,
+          ).then((beatmap) => {
+            if (playbackRequestSeqRef.current !== seq) return;
+            const map = toJsonValue(beatmap.map);
+            setCurrentBeatMapState(map ? {
+              key: desktopLyricsBeatMapKey(map, "dj"),
+              map,
+            } : null);
+          }).catch(() => {
+            if (playbackRequestSeqRef.current === seq) {
+              setCurrentBeatMapState(null);
+            }
+          });
+        }
         if (positionRef.current > 0) controller.seek(positionRef.current);
         await controller.play();
         if (playbackRequestSeqRef.current !== seq) return;
@@ -1802,6 +1922,8 @@ export function App({
         podcastCollections={shelfPodcastCollections}
         currentTrack={currentTrack}
         currentCoverUrl={currentTrack?.coverUrl}
+        beatMapKey={currentBeatMapState?.key}
+        beatMap={currentBeatMapState?.map}
         sidecarBaseUrl={sidecarBaseUrl}
         coverResolution={visualFx.coverResolution}
         fxState={visualFx}
