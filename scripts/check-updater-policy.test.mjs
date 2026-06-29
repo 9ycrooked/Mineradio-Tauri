@@ -29,6 +29,44 @@ describe("updater policy check", () => {
     expect(policy.rustCommands).toContain("check_for_update");
   });
 
+  test("passes when a signed updater build exposes install through Rust and web", () => {
+    const result = evaluateUpdaterPolicy({
+      pubkey: "public-key",
+      createUpdaterArtifacts: true,
+      endpoints: ["https://github.com/zzstar101/Mineradio/releases/latest/download/latest.json"],
+      rustUpdater: "ready-to-download download_and_install",
+      rustCommands: "check_for_update get_updater_status install_update",
+      webUpdater: "checkForUpdate getUpdaterStatus installUpdate",
+      updateHost: "下载并安装",
+      updateStore: "signatureGate installState",
+      licenseGate: "updater signature/release artifact relation signed-install"
+    });
+
+    expect(result).toEqual({ ok: true, errors: [] });
+  });
+
+  test("fails signed updater policy when install artifacts or commands are missing", () => {
+    const result = evaluateUpdaterPolicy({
+      pubkey: "public-key",
+      createUpdaterArtifacts: false,
+      endpoints: ["https://github.com/zzstar101/Mineradio/releases/latest/download/latest.json"],
+      rustUpdater: "ready-to-download",
+      rustCommands: "check_for_update get_updater_status",
+      webUpdater: "checkForUpdate getUpdaterStatus",
+      updateHost: "检查更新",
+      updateStore: "signatureGate installState",
+      licenseGate: "release artifact relation"
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors).toContain("signed updater policy requires bundle.createUpdaterArtifacts=true");
+    expect(result.errors).toContain("signed updater policy requires Rust install_update command");
+    expect(result.errors).toContain("signed updater policy requires Rust updater download_and_install path");
+    expect(result.errors).toContain("signed updater policy requires web installUpdate helper");
+    expect(result.errors).toContain("signed updater policy requires UpdateHost install copy");
+    expect(result.errors).toContain("LICENSE_GATE.md must record signed-install updater policy");
+  });
+
   test("fails if unsigned updater builds can expose install/download behavior", () => {
     const result = evaluateUpdaterPolicy({
       pubkey: "",

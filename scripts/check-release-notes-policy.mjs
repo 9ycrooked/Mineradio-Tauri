@@ -39,8 +39,14 @@ export function evaluateReleaseNotesPolicy(policy) {
   if (!/(does not|will not|不会|不).*old Electron patch JSON|旧\s*Electron[^。\n]*patch JSON/i.test(releaseNotes)) {
     errors.push("release notes must state old Electron patch JSON updater is not migrated");
   }
-  if (!/detection-only/i.test(releaseNotes) || !/(will not|does not|不会|不)[^.\n。]*(download|install|下载|安装)/i.test(releaseNotes)) {
-    errors.push("release notes must state unsigned updater builds are detection-only and will not download or install updates");
+  const hasDetectionOnlyUpdater =
+    /detection-only/i.test(releaseNotes) &&
+    /(will not|does not|不会|不)[^.\n。]*(download|install|下载|安装)/i.test(releaseNotes);
+  const hasSignedUpdater =
+    /(signed|签名)[^.\n。]*(updater|更新)/i.test(releaseNotes) &&
+    /(download|install|下载|安装)/i.test(releaseNotes);
+  if (!hasDetectionOnlyUpdater && !hasSignedUpdater) {
+    errors.push("release notes must state either signed updater install is enabled or unsigned builds are detection-only");
   }
   if (!licenseGate.includes("release-notes-policy:check")) {
     errors.push("LICENSE_GATE.md must mention release-notes-policy:check");

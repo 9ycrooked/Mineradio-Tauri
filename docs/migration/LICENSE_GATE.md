@@ -72,8 +72,8 @@
 - Direct dependency allowlist enforcement：`npm run license:check` 会检查 Tauri 迁移目标 workspace manifests 和 `apps/desktop/src-tauri/Cargo.toml` 的直接依赖，要求它们全部进入 Dependency Audit 表且 Decision 不为 `待审核`。该检查不替代 Rust/npm transitive full audit。
 - AI depth remote source enforcement：`npm run ai-depth-remote-policy:check` 会静态锁定 `@xenova/transformers@2.17.2` jsDelivr runtime、`Xenova/depth-anything-small-hf` HuggingFace model id、`allowLocalModels=false`、ONNX WASM `numThreads=1`、remote source license/provenance 审核记录、隐私说明和 release notes 远程下载披露。该检查不替代 WebView2 真实模型下载/推理/视觉效果手测。
 - packaged notices inclusion：`npm run packaged-notices:check` 会静态检查 Tauri bundle resources 已声明 `LICENSE`、`NOTICE.md`、`THIRD_PARTY_NOTICES.md`、`PRIVACY.md`、`SECURITY.md`；公开发布前仍必须验证 Windows 安装包/安装后目录真实包含这些文件及必要第三方 license 文本。
-- release notes wording：`npm run release-notes-policy:check` 会静态检查 `docs/migration/release-notes-template.md` 具备 GPL-3.0 二开/fork/rewrite、非网易云音乐/QQ 音乐/原 Mineradio 官方身份、`zzstar101/Mineradio`、旧 Electron patch JSON 不迁移和 detection-only updater 限制措辞；真实 GitHub Release notes 必须以该模板为基准并在发布后核验，才能关闭此 gate。
-- updater signature/release artifact relation：`npm run updater-policy:check` 会在 B2 pubkey 为空时静态锁定 detection-only：Tauri updater endpoint 仍指向 `zzstar101/Mineradio`，Rust/web 不暴露 download/install helper，UI 保留 `signature-key-missing` 不可安装文案；公开发布前仍必须在最终发布路径下明确 Tauri updater manifest、签名字段、公钥配置、安装包资产和 release 上传资产之间的关系。若继续 detection-only，不得展示可安装更新为已通过 gate，且需在 release notes/UI 中说明。
+- release notes wording：`npm run release-notes-policy:check` 会静态检查 `docs/migration/release-notes-template.md` 具备 GPL-3.0 二开/fork/rewrite、非网易云音乐/QQ 音乐/原 Mineradio 官方身份、`zzstar101/Mineradio`、旧 Electron patch JSON 不迁移，并明确 signed updater install 已启用或 unsigned detection-only 限制；真实 GitHub Release notes 必须以该模板为基准并在发布后核验，才能关闭此 gate。
+- updater signature/release artifact relation：`npm run updater-policy:check` 会在 pubkey 为空时静态锁定 detection-only；在 pubkey 已配置时静态锁定 signed-install：Tauri updater endpoint 必须指向 `zzstar101/Mineradio`，`bundle.createUpdaterArtifacts=true`，Rust/web 必须暴露 signed install path，UI 必须显示“下载并安装”，`LICENSE_GATE.md` 必须记录 signed-install。公开发布前仍必须验证 Tauri updater manifest、`.sig`、公钥配置、安装包资产和 release 上传资产之间的真实关系。
 - transitive license enforcement：`npm run license-transitive:check` 会检查迁移目标 workspace 的 npm 运行/构建依赖闭包与 Tauri Rust crates；Bun optional platform packages 缺失不会导致当前平台失败，GSAP 标准包、`qq-music-api` GPL-3.0、legacy `css`/`uglify-js` metadata 缺口通过脚本 override 明确记录，`OR` license 表达式允许选择 GPL-3.0 兼容分支（例如 `node-forge` 的 BSD-3-Clause）。该检查不替代安装包内 notices 真实包含验证。
 
 ## QQ 开源项目审核表
@@ -105,7 +105,7 @@
 | tauri-plugin-global-shortcut 2.3.2 | Rust (crate) | MIT/Apache-2.0 | Tauri 全局热键注册、冲突检测和事件桥接 | 兼容；真实 Windows OS 注册/触发仍需 capability gate 验证 | 通过（code-side 接入） |
 | global-hotkey 0.8.0 | Rust (crate, transitive via tauri-plugin-global-shortcut) | MIT/Apache-2.0 | 系统级 hotkey 注册 backend | 兼容；随 Rust crates full audit 复核 | 通过（transitive） |
 | tauri-plugin-single-instance | Rust (crate) | MIT/Apache-2.0 | Tauri 单实例注册与二次启动唤醒主窗口 | 直接依赖 license 已按本地 crate metadata 核对；Windows packaged duplicate-launch evidence 另由 capability gate 跟踪 | 通过（direct） |
-| tauri-plugin-updater 2.10.0 | Rust (crate) | MIT/Apache-2.0 | Tauri updater 检测和签名校验通道；P10.a 只启用 check，download/install 仍受签名 gate 阻挡 | 兼容；公开安装更新仍需 pubkey/signature 或最终风险决策 | 通过（检测接入） |
+| tauri-plugin-updater 2.10.0 | Rust (crate) | MIT/Apache-2.0 | Tauri updater 检测、签名校验和 signed install 通道 | 兼容；公开安装更新仍需真实 release manifest、`.sig`、asset 上传和低版本更新安装验证 | 通过（signed-install code-side 接入） |
 | tauri-plugin-fs | Rust (crate, transitive via tauri-plugin-dialog) | MIT/Apache-2.0 | dialog FilePath conversion / scoped filesystem support | 兼容 | 通过（transitive） |
 | rfd | Rust (crate, transitive via tauri-plugin-dialog) | MIT | native file dialog backend | 兼容 | 通过（transitive） |
 | serde | Rust (crate) | MIT/Apache-2.0 | Rust command/config serialization | 直接依赖 license 已按本地 crate metadata 核对；`license-transitive:check` 已覆盖 Rust closure | 通过（direct + transitive checked） |

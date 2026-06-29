@@ -66,4 +66,31 @@ describe("Tauri updater manifest generator", () => {
     expect(result.errors).toContain("unsigned detection-only manifests must keep platform signatures empty");
     expect(result.errors).toContain("unsigned detection-only manifests must carry x-mineradio-policy.updater=detection-only");
   });
+
+  test("signed manifests require non-empty signatures when pubkey is configured", () => {
+    const missing = evaluateUpdaterManifestPolicy({
+      manifest: buildTauriUpdaterManifest({
+        version: "0.2.0",
+        artifactName: "Mineradio Tauri Rewrite_0.2.0_x64-setup.exe",
+        signature: "",
+        repo: "zzstar101/Mineradio"
+      }),
+      pubkey: "public-key"
+    });
+
+    expect(missing.ok).toBe(false);
+    expect(missing.errors).toContain("signed updater manifests must include non-empty platform signatures");
+
+    const signed = evaluateUpdaterManifestPolicy({
+      manifest: buildTauriUpdaterManifest({
+        version: "0.2.0",
+        artifactName: "Mineradio Tauri Rewrite_0.2.0_x64-setup.exe",
+        signature: "minisignature",
+        repo: "zzstar101/Mineradio"
+      }),
+      pubkey: "public-key"
+    });
+
+    expect(signed).toEqual({ ok: true, errors: [] });
+  });
 });

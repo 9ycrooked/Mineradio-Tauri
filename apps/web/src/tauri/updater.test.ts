@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { checkForUpdate } from "./updater";
+import { checkForUpdate, installUpdate } from "./updater";
 
 test("checkForUpdate returns a gated placeholder outside Tauri", async () => {
 	const result = await checkForUpdate();
@@ -16,4 +16,11 @@ test("checkForUpdate returns a gated placeholder outside Tauri", async () => {
 		signatureGate: true,
 		installState: "signature-key-missing",
 	});
+});
+
+test("installUpdate returns a gated placeholder outside Tauri", async () => {
+	const result = await installUpdate();
+
+	expect(result.installState).toBe("signature-key-missing");
+	expect(result.signatureGate).toBe(true);
 });

@@ -7,6 +7,7 @@ export interface UpdateHostProps {
 	onOpen: () => void;
 	onClose: () => void;
 	onCheck: () => void;
+	onInstall: () => void;
 }
 
 export function shouldShowUpdateEntry(state: Pick<UpdateState, "status" | "version" | "error">): boolean {
@@ -57,8 +58,11 @@ function updateNotes(state: UpdateState): string[] {
 
 function primaryLabel(state: UpdateState): string {
 	if (state.status === "checking") return "正在检查";
+	if (state.status === "downloading") return "正在下载";
+	if (state.status === "installing") return "正在安装";
 	if (state.signatureGate) return "暂不可安装";
 	if (state.status === "error") return "重新检查";
+	if (state.installState === "ready-to-download") return "下载并安装";
 	if (state.status === "available") return "检查更新";
 	if (state.status === "not-available") return "重新检查";
 	return "检查更新";
@@ -72,10 +76,12 @@ function footnote(state: UpdateState): string {
 	return "当前版本检测状态会显示在这里。";
 }
 
-export function UpdateHost({ state, open, onOpen, onClose, onCheck }: UpdateHostProps): ReactElement | null {
+export function UpdateHost({ state, open, onOpen, onClose, onCheck, onInstall }: UpdateHostProps): ReactElement | null {
 	if (!shouldShowUpdateEntry(state) && !open) return null;
 	const version = state.version || state.currentVersion || "0.0.0";
-	const disabled = state.status === "checking" || state.signatureGate;
+	const readyToInstall = state.installState === "ready-to-download" && !state.signatureGate;
+	const disabled = state.status === "checking" || state.status === "downloading" || state.status === "installing" || state.signatureGate;
+	const primaryAction = readyToInstall ? onInstall : onCheck;
 	return (
 		<>
 			<button
@@ -117,7 +123,7 @@ export function UpdateHost({ state, open, onOpen, onClose, onCheck }: UpdateHost
 							))}
 						</div>
 						<div className="update-actions">
-							<button id="update-primary-btn" className="update-primary-btn" type="button" onClick={onCheck} disabled={disabled}>
+							<button id="update-primary-btn" className="update-primary-btn" type="button" onClick={primaryAction} disabled={disabled}>
 								<span id="update-btn-fill" className="update-btn-fill" />
 								<span id="update-btn-label" className="update-btn-label">{primaryLabel(state)}</span>
 							</button>

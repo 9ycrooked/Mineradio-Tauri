@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
 const DEFAULT_REPO = "zzstar101/Mineradio";
@@ -69,6 +69,13 @@ export function evaluateUpdaterManifestPolicy({ manifest, pubkey }) {
     if (manifest?.["x-mineradio-policy"]?.updater !== "detection-only") {
       errors.push("unsigned detection-only manifests must carry x-mineradio-policy.updater=detection-only");
     }
+  } else {
+    if (Object.values(platforms).some((platform) => String(platform?.signature ?? "").trim() === "")) {
+      errors.push("signed updater manifests must include non-empty platform signatures");
+    }
+    if (manifest?.["x-mineradio-policy"]?.updater !== "signed") {
+      errors.push("signed updater manifests must carry x-mineradio-policy.updater=signed");
+    }
   }
   return { ok: errors.length === 0, errors };
 }
@@ -105,9 +112,16 @@ export function generateUpdaterManifestFromWorkspace(rootDir = process.cwd(), ov
     notes: overrides.notes ?? "Mineradio Tauri Rewrite detection-only update manifest.",
     pubDate: overrides.pubDate,
     artifactName,
-    signature: overrides.signature ?? "",
+    signature: overrides.signature ?? readSignatureFile(overrides.signatureFile) ?? "",
     repo: overrides.repo ?? DEFAULT_REPO
   });
+}
+
+function readSignatureFile(signatureFile) {
+  if (!signatureFile) return undefined;
+  const path = resolve(process.cwd(), signatureFile);
+  if (!existsSync(path)) throw new Error(`signature file not found: ${signatureFile}`);
+  return readFileSync(path, "utf8").trim();
 }
 
 if (import.meta.main) {
@@ -118,6 +132,7 @@ if (import.meta.main) {
     pubDate: args.pubDate,
     artifactName: args.artifactName,
     signature: args.signature,
+    signatureFile: args.signatureFile,
     repo: args.repo
   });
   const tauriConfig = readJson(process.cwd(), TAURI_CONFIG_PATH);

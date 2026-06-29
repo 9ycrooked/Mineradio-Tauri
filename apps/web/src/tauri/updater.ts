@@ -77,3 +77,11 @@ export async function checkForUpdate(): Promise<UpdateCheckResult> {
 	const raw = await invokeTauriCommand<RawUpdateCheckResult>("check_for_update");
 	return raw ? mapUpdateCheckResult(raw) : placeholderUpdateCheckResult();
 }
+
+export async function installUpdate(): Promise<UpdateCheckResult> {
+	if (!isTauriRuntime()) {
+		return placeholderUpdateCheckResult();
+	}
+	const raw = await invokeTauriCommand<RawUpdateCheckResult>("install_update");
+	return raw ? mapUpdateCheckResult(raw) : placeholderUpdateCheckResult();
+}

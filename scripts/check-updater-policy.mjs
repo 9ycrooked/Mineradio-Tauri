@@ -18,6 +18,7 @@ export function extractUpdaterPolicy(input) {
   return {
     endpoints: input?.tauriConfig?.plugins?.updater?.endpoints,
     pubkey: input?.tauriConfig?.plugins?.updater?.pubkey,
+    createUpdaterArtifacts: input?.tauriConfig?.bundle?.createUpdaterArtifacts,
     rustUpdater: input?.rustUpdater ?? "",
     rustCommands: input?.rustCommands ?? "",
     webUpdater: input?.webUpdater ?? "",
@@ -67,6 +68,26 @@ export function evaluateUpdaterPolicy(policy) {
     }
     if (!policy.rustUpdater.includes("UPDATER_INSTALL_STATE_SIGNATURE_KEY_MISSING")) {
       errors.push("Rust updater status must expose signature-key-missing install state");
+    }
+  } else {
+    const rustText = `${policy.rustUpdater}\n${policy.rustCommands}`;
+    if (policy.createUpdaterArtifacts !== true) {
+      errors.push("signed updater policy requires bundle.createUpdaterArtifacts=true");
+    }
+    if (!policy.rustCommands.includes("install_update")) {
+      errors.push("signed updater policy requires Rust install_update command");
+    }
+    if (!rustText.includes("download_and_install")) {
+      errors.push("signed updater policy requires Rust updater download_and_install path");
+    }
+    if (!policy.webUpdater.includes("installUpdate")) {
+      errors.push("signed updater policy requires web installUpdate helper");
+    }
+    if (!policy.updateHost.includes("下载并安装")) {
+      errors.push("signed updater policy requires UpdateHost install copy");
+    }
+    if (!policy.licenseGate.includes("signed-install")) {
+      errors.push("LICENSE_GATE.md must record signed-install updater policy");
     }
   }
 

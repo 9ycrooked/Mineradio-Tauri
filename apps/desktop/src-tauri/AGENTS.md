@@ -11,7 +11,7 @@ src/
 ├── commands.rs       # Tauri command handlers + reserved window labels
 ├── sidecar.rs        # 协程：端口分配 / 命令构造 / 原生 TcpStream 健康轮询 / HealthInfo 解析 + SidecarError enum
 ├── paths.rs          # dirs::data_dir()/Mineradio Tauri Rewrite + MINERADIO_APP_DATA_DIR/MINERADIO_LOG_DIR env 覆盖
-└── updater.rs        # P10.a updater status/check mapping；签名 gate 显式阻挡 download/install
+└── updater.rs        # updater status/check/install 状态模型；signed install 由 commands.rs 调 download_and_install
 
 capabilities/
 └── default.json       # core:window/event/webview/app only，scope ["main"]；Rust-owned dialogs 不暴露 renderer plugin commands
@@ -31,7 +31,7 @@ build.rs               # tauri_build::build()
 | 改 sidecar binary args | `sidecar.rs::build_sidecar_command_with_resource_dir`：dev fallback 用 `bun` + `["run", "sidecars/api/src/server.ts"]`；打包态优先 `MINERADIO_SIDECAR_BIN` 或 Tauri resource/exe 同目录 `mineradio-sidecar-api-<target-triple>[.exe]`；所有路径都注入 `MINERADIO_SIDECAR_PORT/APP_DATA_DIR/LOG_DIR/APP_VERSION/SIDECAR_LOG_FILE` | 不要 hardcode port，用 `allocate_port()` |
 | 加 Tauri 多窗口 | `commands.rs labels::DESKTOP_LYRICS / WALLPAPER / LOGIN_NETEASE / LOGIN_QQ` 已 reserved；创窗 Tauri Rust 创建 `WebviewWindowBuilder`，挂对应 capabilities (`windows:["desktop-lyrics",...]`) | login 窗口对应 sidecar 登录流程；不要在 Rust 存 cookie |
 | 改 path 行为 | `paths.rs::resolve_app_data_dir` / `resolve_log_dir`；env 覆盖 helper `with_override(dir, fallback)` | 默认目录必须保持 `Mineradio Tauri Rewrite`，不要回退到旧 Electron 裸 `Mineradio` 用户目录；改动后跑 `npm run app-data-policy:check` |
-| updater | `updater.rs` 输出结构化 `UpdaterStatus`，`commands.rs::check_for_update` 走 Rust `tauri-plugin-updater` API，`get_updater_status` 返回当前签名 gate 状态 | 不暴露 JS updater plugin commands；B2 无 pubkey/私钥，download/install 不能假装可用 |
+| updater | `updater.rs` 输出结构化 `UpdaterStatus`，`commands.rs::check_for_update` / `install_update` 走 Rust `tauri-plugin-updater` API，`get_updater_status` 返回当前签名 gate 状态 | 不暴露 JS updater plugin commands；有 pubkey 时 signed install 必须走 Rust `download_and_install()` |
 | ticking sidecar 健康过短过长 | `sidecar.rs::wait_for_health(base_url, deadline)`：200ms sleep 重试直到 deadline；level too short 可能识别不上 sidecar | 2s 在 tauri dev 可能短，要看 cold-start 平测 |
 
 ## CONVENTIONS（仅记录偏离标准）
@@ -53,7 +53,7 @@ build.rs               # tauri_build::build()
 - **不要 import `tauri-plugin-shell` / `tauri-plugin-opener` 等 unless capabilities 也加**：当前 `open_external` 用 `std::process::Command` 直接派发到 OS 程序，**绕开 plugin 路径**。如要 plugin `shell:allow-open`，要 capabilities + plugin 双配置；选其一。
 - **不要 hardcode Windows-side command**：跨 OS 在 `open_external` 用 `cfg!(target_os="windows"|"macos"|"linux")` 三分支；sidecar dev fallback 用 `"bun"` 程序名（PATH 查找），打包态由 `MINERADIO_SIDECAR_BIN` 或同目录 Tauri externalBin 二进制解析。
 - **不要在 `build_sidecar_command` 设 working directory 到主工作区**：默认继承 Rust 进程 cwd，sidecar 自己找 `sidecars/api/src/server.ts` 相对 path；如有问题加 `cmd.current_dir(workspace_root)`。
-- **不要在 capabilities 加 shell/dialog/fs 或 updater download/install 而不接 JS-side plugin command**：permission 默认 fail。Rust-only dialog usage 已接 `tauri_plugin_dialog::init()`，但无需 renderer ACL。P10.a 只开放 updater check。
+- **不要在 capabilities 加 shell/dialog/fs 或 JS-side updater plugin command**：permission 默认 fail。Rust-only dialog usage 已接 `tauri_plugin_dialog::init()`，updater check/install 也走 Rust commands，无需 renderer updater plugin ACL。
 - **不要用 reqwest/hyper**：sidecar.rs 选择 native TcpStream 显控制 raw HTTP；这是为了**零额外 dependency、最小 crate footprint、不增加 license audit 行** —— 与 DECISIONS A1-A8 「最小依赖 / license allowlist 收紧」一致。
 
 ## UNIQUE STYLES
@@ -62,7 +62,7 @@ build.rs               # tauri_build::build()
 - **no HTTP client dep**：所有 sidecar 健康检查走 stdlib `TcpStream`；后续如要真正 sidecar HTTP 代理 / cookie 注入，也是 sidecar 内部 Bun 处理，不回 Rust 桥
 - **port allocation via TcpListener + drop**：通过 listener bind 后立即 drop 让 OS 分配端口；进程可能拿到 0.1ms 同端口冲突 race，**测试中**：`wait_for_health_succeeds_against_test_listener` 验证 in-test TcpListener 模式
 - **export/import JSON 已接 Rust-owned dialogs**：`export_json_file(fileName,data)` 打开 save dialog、写 pretty UTF-8 JSON、只返回 `cancelled/path`；`import_json_file()` 打开 open dialog、读 UTF-8、解析 JSON、返回 `cancelled/path/data`。路径只来自 dialog，不接受前端任意路径。
-- **updater.rs P10.a 状态模型**：`UpdaterStatus` 包含 `available/version/current_version/body/message/date/error/requires_signature/signature_gate/install_state`；B2 不签名时 `install_state = "signature-key-missing"`，不要接 download/install 成功态。
+- **updater.rs 状态模型**：`UpdaterStatus` 包含 `available/version/current_version/body/message/date/error/requires_signature/signature_gate/install_state`；pubkey 缺失时 `install_state = "signature-key-missing"`，pubkey 存在且有可用更新时 `install_state = "ready-to-download"`，安装由 `commands.rs::install_update` 触发 signed `download_and_install()`。
 - **icon**：`apps/desktop/src-tauri/icons/icon.ico`（com.mineradio.fork.tauri 包）—— 临时复用 build/icon.ico，DECISIONS A2 锁定为最终发布 logo
 - **Cargo.toml license `"GPL-3.0"`**：crate 与 sidecar `qq-music-api` 同 license；组合 bin 可在 GPL-3.0 下分发
 
@@ -75,6 +75,9 @@ cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
 cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml
 & $bun run --filter ./apps/desktop tauri dev   # Tauri webview + sidecar 直跑
 & $bun run --filter ./apps/desktop tauri build # 打 NSIS / installer
+# signed updater build:
+$env:TAURI_SIGNING_PRIVATE_KEY_PATH="$env:USERPROFILE\.tauri\mineradio-tauri-updater.key"
+& $bun run --filter ./apps/desktop tauri build
 ```
 
 ## NOTES
@@ -85,4 +88,4 @@ cargo build --manifest-path apps/desktop/src-tauri/Cargo.toml
 - **`tauri.conf.json` release/dev CSP**：`csp` 已收紧为 `default/style 'self'`，图片/媒体只允许 `self`、`data:`/`blob:`（图片/媒体需要时）和 `http://127.0.0.1:*` sidecar；`script-src`/`connect-src` 额外只允许 baseline AI depth 的 `https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2` 固定版本路径、ONNX WASM 所需的 `'wasm-unsafe-eval'`、`Xenova/depth-anything-small-hf` repo/cache 路径和当前模型 CDN 前缀。`devCsp` 在 Vite/HMR 必需的 `127.0.0.1:5173`、`unsafe-eval`、inline style 之外，也必须保留同一组 AI depth jsDelivr/HuggingFace 精确来源和 `worker-src 'self' blob:`，否则 Tauri dev WebView2 会拦截远程模型加载。不要把 QQ/网易云/Open-Meteo 等外部域直接加进 release/dev CSP，远程封面和音频必须继续走 sidecar `image-proxy` / `audio-proxy`。
 - **Cargo.lock 已提交（依赖已固）**；新 dep 须先 license 审核后记入 `docs/migration/LICENSE_GATE.md` Dependency Audit。
 - **manual `tauri dev` 验证**：Bun 在 PATH 后启动成功 = 窗口立现 + sidecar `/health` 200；sidecar base url 注入 React 通过 invoke `get_runtime_config` 拿 `sidecar_base_url`。
-- **Tauri updater 拐弯**：P10.a 已接 `tauri-plugin-updater`、`invoke("check_for_update")` / `invoke("get_updater_status")`、`plugins.updater.endpoints = https://github.com/zzstar101/Mineradio/releases/latest/download/latest.json`。前端不直接调用 JS updater plugin；B2 无 pubkey/私钥，`download()` 会强制签名校验，公开发布 gate 仍未过。
+- **Tauri updater 拐弯**：已接 `tauri-plugin-updater`、`invoke("check_for_update")` / `invoke("get_updater_status")` / `invoke("install_update")`、`plugins.updater.endpoints = https://github.com/zzstar101/Mineradio/releases/latest/download/latest.json`，并在 `tauri.conf.json` 写入 Tauri updater public key。前端不直接调用 JS updater plugin；公开发布 gate 仍需真实 `.sig`、`latest.json`、release asset 上传和低版本更新安装证据。

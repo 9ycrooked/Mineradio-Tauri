@@ -49,6 +49,7 @@ test("UpdateHost renders baseline entry and signature-gated modal copy", () => {
 			onOpen={() => {}}
 			onClose={() => {}}
 			onCheck={() => {}}
+			onInstall={() => {}}
 		/>
 	);
 	expect(html).toContain('id="update-entry"');
@@ -58,4 +59,26 @@ test("UpdateHost renders baseline entry and signature-gated modal copy", () => {
 	expect(html).toContain("修复播放链路");
 	expect(html).toContain("签名密钥未配置");
 	expect(html).toContain("暂不可安装");
+});
+
+test("UpdateHost renders signed updater install action when ready", () => {
+	let installs = 0;
+	const html = renderToStaticMarkup(
+		<UpdateHost
+			state={updateState({
+				status: "available",
+				version: "0.2.0",
+				signatureGate: false,
+				installState: "ready-to-download",
+			})}
+			open
+			onOpen={() => {}}
+			onClose={() => {}}
+			onCheck={() => {}}
+			onInstall={() => { installs += 1; }}
+		/>
+	);
+	expect(html).toContain("下载并安装");
+	expect(html).toContain("ready");
+	expect(installs).toBe(0);
 });

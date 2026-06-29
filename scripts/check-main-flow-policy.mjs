@@ -13,6 +13,7 @@ const REQUIRED_TAURI_COMMANDS = [
   "configure_global_hotkeys",
   "get_updater_status",
   "check_for_update",
+  "install_update",
   "window_minimize",
   "window_toggle_maximize",
   "window_toggle_fullscreen",

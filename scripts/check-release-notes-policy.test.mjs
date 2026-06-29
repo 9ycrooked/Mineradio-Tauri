@@ -14,6 +14,15 @@ It does not migrate or reuse the old Electron patch JSON updater path.
 Because the Tauri updater public key/signature is not configured, this build is detection-only and will not download or install updates.
 `;
 
+const SIGNED_TEMPLATE = `
+# Mineradio Tauri Rewrite Release Notes
+
+Mineradio Tauri Rewrite is a GPL-3.0 fork/rewrite distributed from zzstar101/Mineradio.
+This release is not an official Netease Cloud Music, QQ Music, or original Mineradio release.
+It does not migrate or reuse the old Electron patch JSON updater path.
+Signed Tauri updater installation is enabled; the app can download and install signed update artifacts from zzstar101/Mineradio.
+`;
+
 describe("release notes policy check", () => {
   test("extracts release note template and gate text needed for public-release wording", () => {
     const policy = extractReleaseNotesPolicy({
@@ -33,6 +42,15 @@ describe("release notes policy check", () => {
 
     expect(result.ok).toBe(true);
     expect(result.errors).toEqual([]);
+  });
+
+  test("passes when release notes clearly state signed updater install is enabled", () => {
+    const result = evaluateReleaseNotesPolicy({
+      releaseNotesTemplate: SIGNED_TEMPLATE,
+      licenseGate: "release notes wording release-notes-policy:check code-side guard"
+    });
+
+    expect(result).toEqual({ ok: true, errors: [] });
   });
 
   test("fails when release notes omit non-affiliation and fork/license wording", () => {

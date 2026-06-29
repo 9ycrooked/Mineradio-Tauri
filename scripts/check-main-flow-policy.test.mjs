@@ -31,6 +31,7 @@ const goodPolicy = extractMainFlowPolicy({
     "commands::configure_global_hotkeys",
     "commands::get_updater_status",
     "commands::check_for_update",
+    "commands::install_update",
     "commands::window_minimize",
     "commands::window_toggle_maximize",
     "commands::window_toggle_fullscreen",

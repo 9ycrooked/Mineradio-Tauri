@@ -66,7 +66,7 @@ import {
   type SidecarStatus,
   type WindowState,
 } from "../tauri/runtime";
-import { checkForUpdate, getUpdaterStatus } from "../tauri/updater";
+import { checkForUpdate, getUpdaterStatus, installUpdate } from "../tauri/updater";
 import { BottomControlsHost } from "../components/shell/BottomControlsHost";
 import { PlaylistPanelHost, type PlaylistPanelTab } from "../components/shell/PlaylistPanelHost";
 import { SearchShell, type SearchMode } from "../components/shell/SearchShell";
@@ -1343,6 +1343,25 @@ export function App({
     },
     [applyUpdateCheckResult, setUpdateStatus, showToast],
   );
+
+  const installAvailableUpdate = useCallback(async () => {
+    try {
+      setUpdateStatus("downloading");
+      showToast("开始下载更新");
+      setUpdateStatus("installing");
+      const result = await installUpdate();
+      applyUpdateCheckResult(result);
+      if (result.error) {
+        setUpdateStatus("error");
+        showToast(result.message || result.error);
+        return;
+      }
+      showToast("更新安装程序已启动");
+    } catch (e) {
+      setUpdateStatus("error");
+      showToast(e instanceof Error ? e.message : "更新安装失败");
+    }
+  }, [applyUpdateCheckResult, setUpdateStatus, showToast]);
 
   const setProviderStatus = useCallback((status: ProviderLoginStatus) => {
     if (status.provider === "netease") setNeteaseStatus(status);
@@ -3212,6 +3231,7 @@ export function App({
               onOpen={() => setUpdateModalOpen(true)}
               onClose={() => setUpdateModalOpen(false)}
               onCheck={() => void refreshUpdateStatus(true)}
+              onInstall={() => void installAvailableUpdate()}
             />
           </div>
         }
