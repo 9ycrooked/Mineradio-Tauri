@@ -210,8 +210,6 @@ export async function handleShelfDetailRowAction(payload: ShelfDetailRowActionPa
 		return true;
 	}
 
-	if (!isPlayable(track.playableState)) return false;
-
 	if (action === "like") {
 		if (track.provider !== "netease" || !payload.client?.likeSong) {
 			payload.onResult?.("当前来源暂不支持红心同步", "fail");
@@ -227,6 +225,8 @@ export async function handleShelfDetailRowAction(payload: ShelfDetailRowActionPa
 			return false;
 		}
 	}
+
+	if (!isPlayable(track.playableState)) return false;
 
 	if (action === "next") {
 		usePlaybackStore.getState().insertNext(track);
