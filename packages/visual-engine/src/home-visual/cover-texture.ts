@@ -228,7 +228,14 @@ export function createHomeCoverTextureController(
 	return {
 		setCoverUrl,
 		setAiDepthEnabled(enabled) {
-			aiDepthEnabled = !!enabled;
+			const next = !!enabled;
+			if (next === aiDepthEnabled) return;
+			aiDepthEnabled = next;
+			if (currentUrl) {
+				const url = currentUrl;
+				currentUrl = "";
+				setCoverUrl(url);
+			}
 		},
 		advanceColorMix,
 		advanceDepth(dtSeconds) {

@@ -186,6 +186,75 @@ test("setCoverUrl(url) keeps the heuristic depth target when aiDepth is enabled 
 	expect(uniforms.uAiBoost.value).toBe(0.55);
 });
 
+test("setAiDepthEnabled(true) immediately reruns the current cover through the AI depth path", async () => {
+	const uniforms = makeUniforms();
+	const heuristicCanvas = { width: 256, height: 256, label: "heuristic" };
+	const aiCanvas = { width: 256, height: 256, label: "ai-depth" };
+	const loaded: string[] = [];
+	let aiRuns = 0;
+	const ctl = createHomeCoverTextureController({
+		uniforms: uniforms as never,
+		loadImage: async (url) => {
+			loaded.push(url);
+			return { width: 64, height: 64, src: url };
+		},
+		buildEdgeDepth: () => heuristicCanvas as never,
+		aiDepthEnabled: false,
+		estimateAiDepth: async () => {
+			aiRuns += 1;
+			return aiCanvas as never;
+		},
+		mergeAiDepth: (_heuristic, ai) => ai,
+	});
+	ctl.setCoverUrl("https://img.example/a.jpg");
+	await ctl.whenIdle();
+	expect(aiRuns).toBe(0);
+
+	ctl.setAiDepthEnabled(true);
+	await ctl.whenIdle();
+
+	expect(loaded).toEqual(["https://img.example/a.jpg", "https://img.example/a.jpg"]);
+	expect(aiRuns).toBe(1);
+	expect(uniforms.uEdgeTex.value.image).toBe(aiCanvas);
+});
+
+test("setAiDepthEnabled(false) reruns the current cover and ignores stale in-flight AI depth", async () => {
+	const uniforms = makeUniforms();
+	const heuristicCanvas = { width: 256, height: 256, label: "heuristic" };
+	const aiCanvas = { width: 256, height: 256, label: "ai-depth" };
+	const aiResolver: { current?: (value: typeof aiCanvas) => void } = {};
+	const loaded: string[] = [];
+	const ctl = createHomeCoverTextureController({
+		uniforms: uniforms as never,
+		loadImage: async (url) => {
+			loaded.push(url);
+			return { width: 64, height: 64, src: url };
+		},
+		buildEdgeDepth: () => heuristicCanvas as never,
+		aiDepthEnabled: true,
+		estimateAiDepth: async () => new Promise<typeof aiCanvas>((resolve) => {
+			aiResolver.current = resolve;
+		}),
+		mergeAiDepth: (_heuristic, ai) => ai,
+	});
+	ctl.setCoverUrl("https://img.example/a.jpg");
+	await Promise.resolve();
+
+	ctl.setAiDepthEnabled(false);
+	await ctl.whenIdle();
+	expect(uniforms.uEdgeTex.value.image).toBe(heuristicCanvas);
+
+	aiResolver.current?.(aiCanvas);
+	await Promise.resolve();
+	await ctl.whenIdle();
+
+	expect(loaded).toEqual(["https://img.example/a.jpg", "https://img.example/a.jpg"]);
+	expect(uniforms.uEdgeTex.value.image).toBe(heuristicCanvas);
+	expect(uniforms.uAiBoost.value).toBe(0);
+	ctl.advanceDepth(0.18);
+	expect(uniforms.uAiBoost.value).toBe(0.55);
+});
+
 test("coverTextureSizeForResolution preserves baseline 256/384/512 thresholds", () => {
 	expect(coverTextureSizeForResolution(0.75)).toBe(256);
 	expect(coverTextureSizeForResolution(1.09)).toBe(256);

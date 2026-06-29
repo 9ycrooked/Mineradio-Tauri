@@ -258,6 +258,12 @@ const OVERLAY_TOGGLES: ToggleDef[] = [
   { key: "lyricCameraLock", id: "t-lyricCameraLock", label: "歌词镜头绑定" },
   { key: "bloom", id: "t-bloom", label: "粒子溢光" },
   { key: "edge", id: "t-edge", label: "轮廓高亮" },
+  {
+    key: "aiDepth",
+    id: "t-aidepth",
+    label: "AI 立体增强",
+    title: "首次会下载深度模型",
+  },
   { key: "desktopLyrics", id: "t-desktopLyrics", label: "桌面歌词" },
   {
     key: "desktopLyricsClickThrough",

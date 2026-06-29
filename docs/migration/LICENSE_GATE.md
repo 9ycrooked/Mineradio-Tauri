@@ -14,6 +14,7 @@
 - GSAP 只使用可合法分发的标准能力，不引入会员/闭源插件。
 - NeteaseCloudMusicApi 继续保留原 license 和 NOTICE。
 - 新增依赖必须进入 license allowlist。
+- AI depth 为对齐 Electron baseline 使用远程 `@xenova/transformers` jsDelivr runtime 和 HuggingFace 模型来源；公开发布前必须复核 runtime/model 许可、隐私/网络说明和 WebView2 CSP 行为。
 
 ## License Allowlist
 
@@ -118,6 +119,7 @@
 | gsap | npm | Standard no-charge license | animation timelines/easing; code imports `gsap` and `gsap/CustomEase` from the standard npm package only | Club/member/闭源插件禁用；direct usage scan found no Club plugin imports, but packaged notices/release wording remain tracked separately | 通过（direct standard package） |
 | GSAP | vendor/baseline reference | Standard no-charge license | Electron baseline `public/vendor/gsap.min.js` reference and legacy runtime | Club/member/闭源插件禁用；public release still needs packaged notices inclusion verification | 通过（baseline reference） |
 | happy-dom | npm devDependency | MIT | visual-engine DOM-like test environment | MIT 兼容 | 通过 |
+| @xenova/transformers + Xenova/depth-anything-small-hf | remote runtime/model source | 发布前复核 | AI depth baseline parity：jsDelivr runtime + HuggingFace model 下载，不写入 npm manifest | 远程执行/模型下载需要 release notes/privacy/CSP 说明；不作为通用 CDN 放行 | 记录（source allowance；公开发布前复核） |
 | jsososo/qq-music-api（npm `qq-music-api`） | npm | GPL-3.0 | QQ provider | 与本项目同 GPL-3.0，组合作品可分发 | 通过 |
 | axios ^0.21.2 | npm [transitive via qq-music-api] | MIT | HTTP 客户端 | MIT 兼容 | 通过（transitive） |
 | cheerio ^1.0.0-rc.3 | npm [transitive via qq-music-api] | MIT | HTML 解析 | MIT 兼容 | 通过（transitive） |

@@ -68,6 +68,10 @@ import { TopRightControls } from "../components/shell/TopRightControls";
 import { UpdateHost } from "../components/shell/UpdateHost";
 import { EmptyHomeHost } from "../home/EmptyHomeHost";
 import { SplashHost, type SplashHostProps } from "../visual/SplashHost";
+import {
+  AI_DEPTH_STATUS_EVENT,
+  type AiDepthStatusDetail,
+} from "../visual/ai-depth-estimator";
 import { VisualControlPanelHost } from "../visual/VisualControlPanelHost";
 import {
   VisualEngineHost,
@@ -613,6 +617,10 @@ export function App({
   const toast = useUiStore((s) => s.toast);
   const showToast = useUiStore((s) => s.showToast);
   const clearToast = useUiStore((s) => s.clearToast);
+  const [aiDepthChip, setAiDepthChip] = useState({
+    visible: false,
+    text: "AI 深度估计…",
+  });
   const updateState = useUpdateStore();
   const applyUpdateCheckResult = useUpdateStore((s) => s.applyCheckResult);
   const setUpdateStatus = useUpdateStore((s) => s.setStatus);
@@ -1391,6 +1399,13 @@ export function App({
       saveVisualFxToStorage();
       if (key === "shelfShowPodcasts" || key === "shelfMergeCollections")
         saveShelfSettingsToStorage();
+      if (key === "aiDepth") {
+        showToast(
+          value
+            ? "已开启后台 AI 立体增强"
+            : "已关闭 AI 立体增强, 使用轻量弧面",
+        );
+      }
     },
     [
       setShelfMergeCollections,
@@ -1399,6 +1414,21 @@ export function App({
       showToast,
     ],
   );
+
+  useEffect(() => {
+    const handleAiDepthStatus = (event: Event) => {
+      const detail = (event as CustomEvent<AiDepthStatusDetail>).detail;
+      if (!detail) return;
+      if (detail.toast) showToast(detail.toast);
+      setAiDepthChip((current) => ({
+        visible: detail.visible,
+        text: detail.text || current.text || "AI 深度估计…",
+      }));
+    };
+    window.addEventListener(AI_DEPTH_STATUS_EVENT, handleAiDepthStatus);
+    return () =>
+      window.removeEventListener(AI_DEPTH_STATUS_EVENT, handleAiDepthStatus);
+  }, [showToast]);
 
   const updateVisualStringSetting = useCallback(
     (key: keyof typeof visualFx, value: string) => {
@@ -2113,6 +2143,10 @@ export function App({
         }}
         desktopLyricsMotionRef={desktopLyricsMotionRef}
       />
+      <div id="ai-depth-chip" className={aiDepthChip.visible ? "show" : ""}>
+        <div className="mini-spin" />
+        <span id="ai-depth-text">{aiDepthChip.text}</span>
+      </div>
       <VisualControlPanelHost
         preset={visualPreset}
         intensity={visualIntensity}

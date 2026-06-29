@@ -177,6 +177,8 @@ export {
 export type { HomeParticleField, HomeParticleFieldOptions } from "./home-visual/home-particle-field";
 export { createHomeCoverTextureController } from "./home-visual/cover-texture";
 export type {
+	HomeAiDepthEstimator,
+	HomeAiDepthMerger,
 	HomeCoverImage,
 	HomeCoverCanvasFactory,
 	HomeCoverLoader,

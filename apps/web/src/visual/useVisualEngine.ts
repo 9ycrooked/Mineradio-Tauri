@@ -45,6 +45,7 @@ import { attachShelfPointerInteractionWiring } from "./shelf-pointer-interaction
 import type { ShelfDetailRowClickPayload } from "./shelf-pointer-interactions";
 import type { ShelfDetailContentListController } from "./shelf-detail-data";
 import { createShelfPaneWheelSwitcher } from "./shelf-pane-switch";
+import { createJsDelivrAiDepthEstimator } from "./ai-depth-estimator";
 import {
 	attachShelfFocusZonePointerWiring,
 	createSecondaryPlaylistEdgeGuard,
@@ -432,6 +433,8 @@ function disposeHandles(handles: MountedHandles | null): void {
 
 export function useVisualEngine(refs: VisualEngineRefs): void {
 	const disposedRef = useRef(false);
+	const aiDepthEstimatorRef = useRef<ReturnType<typeof createJsDelivrAiDepthEstimator> | null>(null);
+	if (!aiDepthEstimatorRef.current) aiDepthEstimatorRef.current = createJsDelivrAiDepthEstimator();
 	useEffect(() => {
 		disposedRef.current = false;
 		const host = refs.hostRef.current;
@@ -474,6 +477,7 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 				scene: renderer.scene,
 				coverResolution: refs.coverResolution,
 				fx: runtimeFx,
+				estimateAiDepth: aiDepthEstimatorRef.current ?? undefined,
 			});
 			let homeVisualPreviousPreset: number | null = null;
 			let homeVisualPreviewActive = false;

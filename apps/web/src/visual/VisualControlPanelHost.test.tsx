@@ -37,6 +37,8 @@ test("VisualControlPanelHost renders baseline DIY control sections", () => {
   expect(html).toContain('data-font="stone-song"');
   expect(html).toContain('id="fx-overlay-fold"');
   expect(html).not.toContain('id="t-float"');
+  expect(html).toContain('id="t-aidepth"');
+  expect(html).toContain("AI 立体增强");
   expect(html).toContain('id="t-desktopLyrics"');
   expect(html).not.toContain('id="t-wallpaperMode"');
   expect(html).not.toContain("壁纸模式");
@@ -107,6 +109,7 @@ test("VisualControlPanelHost opens the panel and emits baseline preset/setting c
     container.querySelector('[data-font="stone-song"]') as HTMLButtonElement
   ).click();
   (container.querySelector("#t-cinema") as HTMLButtonElement).click();
+  (container.querySelector("#t-aidepth") as HTMLButtonElement).click();
   (
     container.querySelector("#t-shelfShowPodcasts") as HTMLButtonElement
   ).click();
@@ -126,6 +129,7 @@ test("VisualControlPanelHost opens the panel and emits baseline preset/setting c
     "intensity:1.2",
     "lyricFont:stone-song",
     "cinema:false",
+    "aiDepth:true",
     "shelfShowPodcasts:false",
     "desktopLyricsOpacity:0.48",
     "desktopLyricsFps:120",
