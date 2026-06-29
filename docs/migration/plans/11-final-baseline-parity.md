@@ -299,7 +299,7 @@ This plan supersedes using the old master implementation plan as a direct execut
 
 **Goal:** Make startup, HomeVisual, glass controls, stage lyrics, connector particles, and 3D shelf match Electron visual timing, composition, and interaction.
 
-> 2026-06-29 execution status: the implementation slices listed below have been completed in code for startup sound, HomeVisual cover/depth/ripple/back-cover/skull/free-camera, stage lyrics timing/feed, connector particles, shelf account data/detail/actions/feedback/pane lifecycle, and resize/camera guards where covered by automated tests. Keep the historical steps unchecked in this plan until Phase 3 is closed by the manual visual evidence in Step 9 and the matching rows in `CAPABILITY_PARITY_CHECKLIST.md` are checked.
+> 2026-06-30 execution status: Phase 3 is code-side complete for current migration execution. Existing implementation and automated verification cover Steps 1-8; this closeout also preserves HomeVisual current/previous cover parity for `data:image/*` and `blob:` sources while keeping unsupported schemes rejected. WebView2/Electron visual recordings and screenshots are explicitly non-blocking for phase progression under the current user directive, but remain required release/parity evidence and do not close capability checklist gates by themselves.
 
 **Files:**
 
@@ -323,35 +323,35 @@ This plan supersedes using the old master implementation plan as a direct execut
 - Connector particles and 3D shelf: `public/index.html` `makeShelfManager`, connector particle attributes, shelf layout, camera focus, pointer/wheel/right-click/detail list.
 - Glass controls: `docs/GLASS_SVG_TEXTURE.md` and baseline SVG filter values.
 
-- [ ] **Step 1: Add visual smoke and data-feed tests**
+- [x] **Step 1: Add visual smoke and data-feed tests**
 
   Tests must cover resize updates, stage lyric word data, shelf data source selection, splash-ready click gate, and visual-host nonblank canvas checks where test environment allows.
 
-- [ ] **Step 2: Restore splash sound parity**
+- [x] **Step 2: Restore splash sound parity**
 
   Port baseline intro sound behavior, unlock fallback, ready gating, reduced-motion behavior, and cleanup order without breaking the existing splash visual parity.
 
-- [ ] **Step 3: Complete HomeVisual asset chain**
+- [x] **Step 3: Complete HomeVisual asset chain**
 
   Replace placeholder texture paths with real cover/current/previous cover inputs. Implement depth/edge/ripple/back-cover/float/skull/gesture/free-camera behaviors from baseline and keep audio uniform projection byte-level constants where already migrated.
 
-- [ ] **Step 4: Fix stage lyrics timing and word feed**
+- [x] **Step 4: Fix stage lyrics timing and word feed**
 
   Normalize render-loop time units so trigonometric and GSAP timing match baseline. Pass word timing/duration/charCount data from shared lyrics to `visual-engine`.
 
-- [ ] **Step 5: Complete connector particles**
+- [x] **Step 5: Complete connector particles**
 
   Restore baseline particle attributes, position, colors, randomness, and host mount conditions.
 
-- [ ] **Step 6: Complete 3D shelf data and interaction parity**
+- [x] **Step 6: Complete 3D shelf data and interaction parity**
 
   Shelf data source order must match baseline: user playlists/favorites/podcasts where available, then queue fallback. Complete row actions, pinned detail list behavior, selection sound/feedback, hover lift, scroll zones, right-click mode mutation, and detail panel layering.
 
-- [ ] **Step 7: Add resize and camera parity**
+- [x] **Step 7: Add resize and camera parity**
 
   Add renderer/camera resize listeners in `useVisualEngine` and ensure DPR, aspect ratio, and camera projection update exactly when baseline would update them.
 
-- [ ] **Step 8: Verify automated phase**
+- [x] **Step 8: Verify automated phase**
 
   Run:
 
@@ -366,9 +366,13 @@ This plan supersedes using the old master implementation plan as a direct execut
 
   Expected: all commands exit 0.
 
+  2026-06-30 note: `bun test packages/visual-engine`, `bun run --filter @mineradio/visual-engine typecheck`, `bun test apps/web`, `bun run --filter ./apps/web build`, and `git diff --check` passed for the Phase 3 code-side closeout. The Vite build retained the pre-existing large chunk warning.
+
 - [ ] **Step 9: Manual visual evidence**
 
   Capture WebView2 and Electron baseline side by side for: splash ready/dismiss, HomeVisual idle, playback visual entry, control console reveal/hide, visual console, stage lyrics, shelf open/scroll/detail/click, window resize. Expected: no blank canvas, no hidden visual-host failure masked by Home, no obvious timing or layering difference.
+
+  2026-06-30 note: this evidence remains required for final release/parity sign-off, but screenshots and recordings are not a blocker for current phase progression per user instruction.
 
 ## Phase 4: Tauri Runtime, Sidecar Lifecycle, Login, Desktop Lyrics, And Windows Parity
 

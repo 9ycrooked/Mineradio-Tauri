@@ -65,6 +65,75 @@ test("setCoverUrl(url) loads the current cover image, marks texture dirty, and s
 	expect(uniforms.uLoading.value).toBe(0);
 });
 
+test("setCoverUrl(data:image) accepts inline custom cover sources instead of clearing", async () => {
+	const uniforms = makeUniforms();
+	const loaded: string[] = [];
+	const dataUrl = "data:image/png;base64,iVBORw0KGgo=";
+	const ctl = createHomeCoverTextureController({
+		uniforms: uniforms as never,
+		loadImage: async (url) => {
+			loaded.push(url);
+			return { width: 32, height: 32, src: url };
+		},
+	});
+
+	ctl.setCoverUrl(dataUrl);
+	await ctl.whenIdle();
+
+	expect(loaded).toEqual([dataUrl]);
+	expect(ctl.getCurrentUrl()).toBe(dataUrl);
+	expect(uniforms.uCoverTex.value.image).toEqual({ width: 32, height: 32, src: dataUrl });
+	expect(uniforms.uHasCover.value).toBe(1);
+	expect(uniforms.uColorMixT.value).toBe(0);
+});
+
+test("setCoverUrl(blob) accepts local object URLs used by imported cover images", async () => {
+	const uniforms = makeUniforms();
+	const loaded: string[] = [];
+	const blobUrl = "blob:http://localhost/local-cover";
+	const ctl = createHomeCoverTextureController({
+		uniforms: uniforms as never,
+		loadImage: async (url) => {
+			loaded.push(url);
+			return { width: 48, height: 48, src: url };
+		},
+	});
+
+	ctl.setCoverUrl(blobUrl);
+	await ctl.whenIdle();
+
+	expect(loaded).toEqual([blobUrl]);
+	expect(ctl.getCurrentUrl()).toBe(blobUrl);
+	expect(uniforms.uCoverTex.value.image).toEqual({ width: 48, height: 48, src: blobUrl });
+	expect(uniforms.uHasCover.value).toBe(1);
+	expect(uniforms.uColorMixT.value).toBe(0);
+});
+
+test("setCoverUrl(unsupported scheme) preserves safety behavior by clearing without loading", async () => {
+	const uniforms = makeUniforms();
+	const loaded: string[] = [];
+	const ctl = createHomeCoverTextureController({
+		uniforms: uniforms as never,
+		loadImage: async (url) => {
+			loaded.push(url);
+			return { width: 32, height: 32, src: url };
+		},
+	});
+	ctl.setCoverUrl("https://img.example/a.jpg");
+	await ctl.whenIdle();
+	expect(uniforms.uHasCover.value).toBe(1);
+
+	ctl.setCoverUrl("file:///Users/me/cover.png");
+	await ctl.whenIdle();
+
+	expect(loaded).toEqual(["https://img.example/a.jpg"]);
+	expect(ctl.getCurrentUrl()).toBe("");
+	expect(uniforms.uHasCover.value).toBe(0);
+	expect(uniforms.uLoading.value).toBe(0);
+	expect(uniforms.uHasDepth.value).toBe(0);
+	expect(uniforms.uAiBoost.value).toBe(0);
+});
+
 test("setCoverUrl(next) snapshots the previous loaded cover into uPrevCoverTex before applying next", async () => {
 	const uniforms = makeUniforms();
 	const ctl = createHomeCoverTextureController({

@@ -54,6 +54,12 @@ export interface HomeCoverTextureController {
 }
 
 const HTTP_URL_RE = /^https?:\/\//i;
+const INLINE_IMAGE_URL_RE = /^data:image\//i;
+const BLOB_URL_RE = /^blob:/i;
+
+function isAllowedCoverUrl(url: string): boolean {
+	return HTTP_URL_RE.test(url) || INLINE_IMAGE_URL_RE.test(url) || BLOB_URL_RE.test(url);
+}
 
 export function coverTextureSizeForResolution(v: number): number {
 	const normalized = normalizeCoverResolution(v);
@@ -176,7 +182,7 @@ export function createHomeCoverTextureController(
 
 	function setCoverUrl(rawUrl: string | null | undefined): void {
 		const url = String(rawUrl ?? "").trim();
-		if (!url || !HTTP_URL_RE.test(url)) {
+		if (!url || !isAllowedCoverUrl(url)) {
 			clearCover();
 			return;
 		}
