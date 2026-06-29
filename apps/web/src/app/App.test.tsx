@@ -175,12 +175,22 @@ test("Home blank dismiss accepts only empty Home surfaces", async () => {
 			<button class="home-card" id="card">card</button>
 			<input id="search-input" />
 			<div id="bottom-handle"></div>
+			<div id="fx-panel"></div>
+			<div id="playlist-panel"></div>
+			<div id="mini-queue-popover"></div>
+			<div id="visual-guide"></div>
+			<div id="toast"></div>
 		</section>
 	`;
 	expect(isHomeBlankDismissElement(document.getElementById("blank"))).toBe(true);
 	expect(isHomeBlankDismissElement(document.getElementById("card"))).toBe(false);
 	expect(isHomeBlankDismissElement(document.getElementById("search-input"))).toBe(false);
 	expect(isHomeBlankDismissElement(document.getElementById("bottom-handle"))).toBe(false);
+	expect(isHomeBlankDismissElement(document.getElementById("fx-panel"))).toBe(false);
+	expect(isHomeBlankDismissElement(document.getElementById("playlist-panel"))).toBe(false);
+	expect(isHomeBlankDismissElement(document.getElementById("mini-queue-popover"))).toBe(false);
+	expect(isHomeBlankDismissElement(document.getElementById("visual-guide"))).toBe(false);
+	expect(isHomeBlankDismissElement(document.getElementById("toast"))).toBe(false);
 });
 
 test("shouldShowEmptyHome follows baseline force/suppress/playback gates", () => {
