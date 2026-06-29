@@ -44,6 +44,8 @@ export interface StageLyricsLifecycleOpts {
 	isPlayingSupplier?: () => boolean;
 	palette?: Partial<LyricPalette>;
 	getShelfVisibility?: () => number;
+	getShelfMode?: () => string | null | undefined;
+	getShelfHasOpenContent?: () => boolean;
 	getSkullShelfOpen?: () => boolean;
 	dotTexture?: THREE.Texture;
 	pixelScale?: number;
@@ -263,6 +265,14 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 		return state.shelfVisibility;
 	}
 
+	function getShelfMode(): string {
+		return opts.getShelfMode?.() ?? "side";
+	}
+
+	function getShelfHasOpenContent(): boolean {
+		return typeof opts.getShelfHasOpenContent === "function" ? !!opts.getShelfHasOpenContent() : false;
+	}
+
 	function getSkullShelfOpen(): boolean {
 		return typeof opts.getSkullShelfOpen === "function" ? !!opts.getSkullShelfOpen() : false;
 	}
@@ -283,7 +293,7 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 
 	function getLyricLayoutOptions(): Required<LyricLayoutOptions> {
 		const raw = opts.lyricLayoutOptionsSupplier?.() ?? {};
-		return {
+		const layout = {
 			lyricCameraLock: !!raw.lyricCameraLock,
 			lyricScale: clamp(Number(raw.lyricScale) || 1, 0.35, 1.65),
 			lyricOffsetX: clamp(Number(raw.lyricOffsetX) || 0, -2, 2),
@@ -292,6 +302,18 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 			lyricTiltX: clamp(Number(raw.lyricTiltX) || 0, -42, 42),
 			lyricTiltY: clamp(Number(raw.lyricTiltY) || 0, -42, 42),
 		};
+		if (
+			!layout.lyricCameraLock &&
+			getShelfMode() === "side" &&
+			getShelfHasOpenContent() &&
+			!getSkullShelfOpen()
+		) {
+			layout.lyricScale *= 0.56;
+			layout.lyricOffsetX = clamp(layout.lyricOffsetX - 1.78, -2, 2);
+			layout.lyricOffsetY = clamp(layout.lyricOffsetY + 0.18, -1.2, 1.35);
+			layout.lyricOffsetZ = clamp(layout.lyricOffsetZ + 0.84, -1.6, 1.6);
+		}
+		return layout;
 	}
 
 	function getStageLyricLockBounds(): { w: number; h: number } {

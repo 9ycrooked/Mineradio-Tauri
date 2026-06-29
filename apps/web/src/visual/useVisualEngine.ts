@@ -465,6 +465,8 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 				isPlayingSupplier: () => refs.isPlayingRef.current,
 				lyricLinesSupplier: () => refs.lyricLinesRef.current,
 				getShelfVisibility: () => shelfManager.getShelfVisibility(),
+				getShelfMode: () => refs.shelfModeRef?.current ?? refs.fxDefaults?.shelf ?? "side",
+				getShelfHasOpenContent: () => shelfManager.hasOpenContent(),
 				lyricTextOptionsSupplier: () => {
 					const fx = mergeFxState(mergeFxState(cloneFxState(), refs.fxDefaults), refs.fxRef?.current);
 					return {

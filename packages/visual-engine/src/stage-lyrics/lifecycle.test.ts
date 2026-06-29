@@ -465,6 +465,51 @@ test("update applies baseline free lyric layout scale, offsets, and tilt to the 
 	lifecycle.dispose();
 });
 
+test("update applies baseline non-skull shelf-detail lyric offset when side detail is open", async () => {
+	const scene = makeFakeScene();
+	const lifecycle = createStageLyricsLifecycle({
+		scene: scene as never,
+		threeFactory: makeFakeThree(),
+		gsapProvider: () => makeFakeGsap([]),
+		customEaseProvider: async () => null,
+		lyricLinesSupplier: () => [{ t: 0, text: "Shelf detail lyric" }] as never,
+		currentTimeSupplier: () => 0.5,
+		isPlayingSupplier: () => true,
+		audioDurationSupplier: () => 9999,
+		dotTexture: makeFakeDotTexture(),
+		particleLyricsFlagSupplier: () => true,
+		lyricGlowStrengthSupplier: () => 0,
+		lyricGlowBeatFlagSupplier: () => false,
+		lyricSunEnergyHolder: { get: () => 0, set: () => {} },
+		lyricLayoutOptionsSupplier: () => ({
+			lyricCameraLock: false,
+			lyricScale: 1.4,
+			lyricOffsetX: 0.2,
+			lyricOffsetY: -0.1,
+			lyricOffsetZ: 0.3,
+			lyricTiltX: 0,
+			lyricTiltY: 0,
+		}),
+		getShelfMode: () => "side",
+		getShelfHasOpenContent: () => true,
+		getSkullShelfOpen: () => false,
+		rand: () => 0.35,
+	});
+	await lifecycle.mount(scene as never);
+	lifecycle.update(makeCtx(0.5, 0.1));
+	const group = lifecycle.group as unknown as {
+		position: { x: number; y: number; z: number };
+		scale: { x: number; y: number; z: number };
+	};
+	expect(group.scale.x).toBeCloseTo(1.4 * 0.56, 6);
+	expect(group.scale.y).toBeCloseTo(1.4 * 0.56, 6);
+	expect(group.scale.z).toBeCloseTo(1.4 * 0.56, 6);
+	expect(group.position.x).toBeCloseTo(0.2 - 1.78, 6);
+	expect(group.position.y).toBeCloseTo(0.2 - 0.1 + 0.18, 6);
+	expect(group.position.z).toBeCloseTo(1.46 + 0.3 + 0.84, 6);
+	lifecycle.dispose();
+});
+
 test("update applies baseline camera-locked lyric layout from camera basis with lock easing", async () => {
 	const scene = makeFakeScene();
 	const camera = makeFakeCamera({ x: 1, y: 2, z: 3 });
