@@ -12,6 +12,8 @@ import {
 } from "./home-particle-field";
 import {
 	createHomeCoverTextureController,
+	type HomeAiDepthEstimator,
+	type HomeAiDepthMerger,
 	type HomeCoverCanvasFactory,
 	type HomeCoverImage,
 	type HomeCoverLoader,
@@ -32,6 +34,8 @@ export interface HomeVisualOptions {
 	loadCoverImage?: HomeCoverLoader;
 	createCoverCanvas?: HomeCoverCanvasFactory;
 	buildCoverEdgeDepth?: (image: HomeCoverImage) => HomeCoverImage | null;
+	estimateAiDepth?: HomeAiDepthEstimator;
+	mergeAiDepth?: HomeAiDepthMerger;
 	onCoverLyricPalette?: (palette: LyricPalette) => void;
 	backCoverRandom?: () => number;
 	skullAssetData?: Float32Array | null;
@@ -102,6 +106,9 @@ export async function createHomeVisual(opts: HomeVisualOptions): Promise<HomeVis
 		coverResolution: fieldOpts.coverResolution,
 		createCanvas: opts.createCoverCanvas,
 		buildEdgeDepth: opts.buildCoverEdgeDepth,
+		aiDepthEnabled: fx.aiDepth,
+		estimateAiDepth: opts.estimateAiDepth,
+		mergeAiDepth: opts.mergeAiDepth,
 		onCoverPrepared(image) {
 			latestPreparedCover = image;
 			backCoverLayer?.refreshColorsFromCover(image as CoverCanvasLike);
@@ -152,6 +159,7 @@ export async function createHomeVisual(opts: HomeVisualOptions): Promise<HomeVis
 
 	function stepBody(ctx: FrameContext): void {
 		field.applyFxState(fx);
+		coverController.setAiDepthEnabled(fx.aiDepth);
 		field.points.visible = fx.preset !== SKULL_PRESET_INDEX;
 		const bloomAllowed = !!(fx.bloom && fx.bloomStrength > 0.01) && fx.preset !== SKULL_PRESET_INDEX;
 		field.bloomPoints.visible = bloomAllowed;

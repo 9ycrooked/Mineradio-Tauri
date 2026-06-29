@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { buildEdgeAndDepthCanvas, createCoverDepthTween, visualEase } from "./cover-depth";
+import { buildEdgeAndDepthCanvas, createCoverDepthTween, mergeAiDepthIntoEdgeCanvas, visualEase } from "./cover-depth";
 
 function makeSourceCanvas(width: number, height: number, data: Uint8ClampedArray) {
 	return {
@@ -40,6 +40,25 @@ function makeOutputCanvas() {
 		},
 	};
 	return out;
+}
+
+function makeImageDataCanvas(width: number, height: number, data: Uint8ClampedArray) {
+	return {
+		width,
+		height,
+		getContext(type: string) {
+			expect(type).toBe("2d");
+			return {
+				drawImage() {},
+				getImageData() {
+					return { data };
+				},
+				putImageData(imageData: { data: Uint8ClampedArray }) {
+					data.set(imageData.data);
+				},
+			};
+		},
+	};
 }
 
 test("visualEase preserves baseline smoothstep easing", () => {
@@ -103,4 +122,29 @@ test("createCoverDepthTween advances uHasDepth and uAiBoost with baseline smooth
 	tween.setTarget(0, 0, 1);
 	expect(uniforms.uHasDepth.value).toBe(0);
 	expect(uniforms.uAiBoost.value).toBe(0);
+});
+
+test("mergeAiDepthIntoEdgeCanvas normalizes AI luminance into R and preserves heuristic GBA channels", () => {
+	const heuristic = new Uint8ClampedArray([
+		10, 20, 30, 40,
+		50, 60, 70, 80,
+		90, 100, 110, 120,
+		130, 140, 150, 160,
+	]);
+	const ai = new Uint8ClampedArray([
+		255, 255, 255, 255,
+		200, 200, 200, 255,
+		40, 40, 40, 255,
+		0, 0, 0, 255,
+	]);
+	const heuristicCanvas = makeImageDataCanvas(2, 2, heuristic);
+	const aiCanvas = makeImageDataCanvas(2, 2, ai);
+	const result = mergeAiDepthIntoEdgeCanvas(heuristicCanvas as never, aiCanvas as never);
+	expect(result).toBe(heuristicCanvas);
+	expect(Array.from(heuristic)).toEqual([
+		0, 20, 30, 40,
+		55, 60, 70, 80,
+		215, 100, 110, 120,
+		255, 140, 150, 160,
+	]);
 });

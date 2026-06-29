@@ -4,6 +4,7 @@ import type { ThreeFactory } from "../runtime/renderer-setup";
 import type { AudioSnapshot } from "../audio/audio-snapshot";
 import type { FrameContext } from "../runtime/frame-context";
 import { createHomeVisual } from "./home-visual";
+import { cloneFxState } from "./fx-defaults";
 import { SKULL_PRESET_INDEX } from "./preset-state";
 import { skullBreathOffset } from "./skull-particles";
 
@@ -315,6 +316,33 @@ test("HomeVisual.update advances cover depth uniforms after edge texture generat
 	hv.update(makeFrameCtx({}, { uTime: { value: 0.25 } }) as unknown as FrameContext);
 	expect(hv.getField().materialUniforms.uHasDepth.value as number).toBeGreaterThan(0);
 	expect(hv.getField().materialUniforms.uAiBoost.value as number).toBeGreaterThan(0);
+});
+
+test("HomeVisual routes enabled AI depth estimation through the cover controller", async () => {
+	const scene = makeFakeScene();
+	const edgeCanvas = { width: 256, height: 256, label: "heuristic-edge" };
+	const aiCanvas = { width: 256, height: 256, label: "ai-depth" };
+	const mergedCanvas = { width: 256, height: 256, label: "merged-ai-depth" };
+	const hv = await createHomeVisual({
+		scene: scene as never,
+		threeFactory: makeFakeThree(),
+		fx: { ...cloneFxState(), aiDepth: true },
+		loadCoverImage: async (url) => ({ width: 128, height: 128, src: url }),
+		buildCoverEdgeDepth: () => edgeCanvas,
+		estimateAiDepth: async () => aiCanvas,
+		mergeAiDepth: (heuristic, ai) => {
+			expect(heuristic).toBe(edgeCanvas);
+			expect(ai).toBe(aiCanvas);
+			return mergedCanvas;
+		},
+	});
+	hv.setCoverUrl("https://img.example/a.jpg");
+	await hv.getCoverController().whenIdle();
+	expect(hv.getField().materialUniforms.uEdgeTex.value.image).toBe(mergedCanvas);
+	for (let i = 0; i < 22; i++) {
+		hv.update(makeFrameCtx({}, { uTime: { value: 0.25 + i / 60 } }) as unknown as FrameContext);
+	}
+	expect(hv.getField().materialUniforms.uAiBoost.value as number).toBe(1);
 });
 
 test("HomeVisual.update drives baseline ripple texture from bass rising edges", async () => {

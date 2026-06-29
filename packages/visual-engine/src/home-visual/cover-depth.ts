@@ -102,6 +102,60 @@ export function buildEdgeAndDepthCanvas(
 	return out;
 }
 
+export function mergeAiDepthIntoEdgeCanvas(
+	heuristicCanvas: CoverDepthCanvas,
+	aiCanvas: CoverDepthCanvas,
+): CoverDepthCanvas | null {
+	const width = heuristicCanvas.width || EDGE_SIZE;
+	const height = heuristicCanvas.height || EDGE_SIZE;
+	if (typeof heuristicCanvas.getContext !== "function" || typeof aiCanvas.getContext !== "function") return null;
+	const hctx = heuristicCanvas.getContext("2d");
+	const actx = aiCanvas.getContext("2d");
+	if (!hctx?.getImageData || !hctx.putImageData || !actx?.getImageData) return null;
+	const hImg = hctx.getImageData(0, 0, width, height);
+	const hData = hImg.data instanceof Uint8ClampedArray ? hImg.data : new Uint8ClampedArray(hImg.data);
+	const aData = actx.getImageData(0, 0, width, height).data;
+	const count = width * height;
+	const values = new Float32Array(count);
+	let minV = 1;
+	let maxV = 0;
+	for (let i = 0; i < count; i++) {
+		const di = i * 4;
+		const v = (aData[di] * 0.299 + aData[di + 1] * 0.587 + aData[di + 2] * 0.114) / 255;
+		values[i] = v;
+		if (v < minV) minV = v;
+		if (v > maxV) maxV = v;
+	}
+	let centerSum = 0;
+	let centerCount = 0;
+	let edgeSum = 0;
+	let edgeCount = 0;
+	for (let y = 0; y < height; y++) {
+		for (let x = 0; x < width; x++) {
+			const i = y * width + x;
+			const cx = x / Math.max(1, width - 1) - 0.5;
+			const cy = y / Math.max(1, height - 1) - 0.5;
+			const rr = Math.sqrt(cx * cx + cy * cy);
+			if (rr < 0.22) {
+				centerSum += values[i];
+				centerCount++;
+			} else if (rr > 0.46) {
+				edgeSum += values[i];
+				edgeCount++;
+			}
+		}
+	}
+	const invert = (centerSum / Math.max(1, centerCount)) < (edgeSum / Math.max(1, edgeCount));
+	const range = Math.max(0.001, maxV - minV);
+	for (let i = 0; i < count; i++) {
+		let n = (values[i] - minV) / range;
+		if (invert) n = 1 - n;
+		hData[i * 4] = Math.round(n * 255);
+	}
+	hctx.putImageData({ data: hData, width, height }, 0, 0);
+	return heuristicCanvas;
+}
+
 export function createCoverDepthTween(uniforms: CoverDepthUniforms): CoverDepthTween {
 	let fromDepth = uniforms.uHasDepth.value || 0;
 	let fromAi = uniforms.uAiBoost.value || 0;

@@ -140,6 +140,52 @@ test("setCoverUrl(url) builds the baseline edge/depth texture and advances depth
 	expect(uniforms.uAiBoost.value).toBe(0.55);
 });
 
+test("setCoverUrl(url) boosts depth to the baseline AI target when aiDepth is enabled and an AI depth canvas is available", async () => {
+	const uniforms = makeUniforms();
+	const heuristicCanvas = { width: 256, height: 256, label: "heuristic" };
+	const aiCanvas = { width: 256, height: 256, label: "ai-depth" };
+	const mergedCanvas = { width: 256, height: 256, label: "merged-ai-depth" };
+	const ctl = createHomeCoverTextureController({
+		uniforms: uniforms as never,
+		loadImage: async (url) => ({ width: 64, height: 64, src: url }),
+		buildEdgeDepth: () => heuristicCanvas as never,
+		aiDepthEnabled: true,
+		estimateAiDepth: async (image) => {
+			expect((image as { src: string }).src).toBe("https://img.example/a.jpg");
+			return aiCanvas as never;
+		},
+		mergeAiDepth: (heuristic, ai) => {
+			expect(heuristic).toBe(heuristicCanvas);
+			expect(ai).toBe(aiCanvas);
+			return mergedCanvas as never;
+		},
+	});
+	ctl.setCoverUrl("https://img.example/a.jpg");
+	await ctl.whenIdle();
+	expect(uniforms.uEdgeTex.value.image).toBe(mergedCanvas);
+	ctl.advanceDepth(0.36);
+	expect(uniforms.uHasDepth.value).toBe(1);
+	expect(uniforms.uAiBoost.value).toBe(1);
+});
+
+test("setCoverUrl(url) keeps the heuristic depth target when aiDepth is enabled but AI estimation returns null", async () => {
+	const uniforms = makeUniforms();
+	const heuristicCanvas = { width: 256, height: 256, label: "heuristic" };
+	const ctl = createHomeCoverTextureController({
+		uniforms: uniforms as never,
+		loadImage: async (url) => ({ width: 64, height: 64, src: url }),
+		buildEdgeDepth: () => heuristicCanvas as never,
+		aiDepthEnabled: true,
+		estimateAiDepth: async () => null,
+	});
+	ctl.setCoverUrl("https://img.example/a.jpg");
+	await ctl.whenIdle();
+	expect(uniforms.uEdgeTex.value.image).toBe(heuristicCanvas);
+	ctl.advanceDepth(0.18);
+	expect(uniforms.uHasDepth.value).toBe(1);
+	expect(uniforms.uAiBoost.value).toBe(0.55);
+});
+
 test("coverTextureSizeForResolution preserves baseline 256/384/512 thresholds", () => {
 	expect(coverTextureSizeForResolution(0.75)).toBe(256);
 	expect(coverTextureSizeForResolution(1.09)).toBe(256);

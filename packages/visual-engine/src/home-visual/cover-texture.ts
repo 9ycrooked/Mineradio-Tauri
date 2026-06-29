@@ -3,6 +3,7 @@ import { normalizeCoverResolution } from "./home-particle-field";
 import {
 	buildEdgeAndDepthCanvas,
 	createCoverDepthTween,
+	mergeAiDepthIntoEdgeCanvas,
 	type CoverDepthCanvas,
 	type CoverDepthCanvasFactory,
 	type CoverDepthTween,
@@ -21,6 +22,8 @@ export interface HomeCoverTextureUniforms {
 
 export type HomeCoverImage = CanvasImageSource | { width?: number; height?: number; src?: string };
 export type HomeCoverLoader = (url: string) => Promise<HomeCoverImage>;
+export type HomeAiDepthEstimator = (image: HomeCoverImage) => Promise<HomeCoverImage | null>;
+export type HomeAiDepthMerger = (heuristic: HomeCoverImage, ai: HomeCoverImage) => HomeCoverImage | null;
 export type HomeCoverCanvasFactory = (width: number, height: number) => CanvasImageSource & {
 	width: number;
 	height: number;
@@ -31,6 +34,9 @@ export interface HomeCoverTextureControllerOptions {
 	uniforms: HomeCoverTextureUniforms;
 	loadImage?: HomeCoverLoader;
 	buildEdgeDepth?: (image: HomeCoverImage) => HomeCoverImage | null;
+	aiDepthEnabled?: boolean;
+	estimateAiDepth?: HomeAiDepthEstimator;
+	mergeAiDepth?: HomeAiDepthMerger;
 	onCoverPrepared?: (image: HomeCoverImage) => void;
 	colorMixDurationMs?: number;
 	coverResolution?: number;
@@ -40,6 +46,7 @@ export interface HomeCoverTextureControllerOptions {
 
 export interface HomeCoverTextureController {
 	setCoverUrl(url: string | null | undefined): void;
+	setAiDepthEnabled(enabled: boolean): void;
 	advanceColorMix(dtSeconds: number): void;
 	advanceDepth(dtSeconds: number): void;
 	getCurrentUrl(): string;
@@ -123,6 +130,24 @@ function buildDepthImage(
 	}) as CoverDepthCanvas | null;
 }
 
+async function maybeBuildAiDepthImage(
+	preparedImage: HomeCoverImage,
+	heuristicImage: HomeCoverImage | null,
+	opts: HomeCoverTextureControllerOptions,
+): Promise<{ image: HomeCoverImage | null; aiBoostTarget: number; durationMs: number }> {
+	if (!heuristicImage || !opts.aiDepthEnabled || !opts.estimateAiDepth) {
+		return { image: heuristicImage, aiBoostTarget: 0.55, durationMs: 180 };
+	}
+	const aiImage = await opts.estimateAiDepth(preparedImage);
+	if (!aiImage) return { image: heuristicImage, aiBoostTarget: 0.55, durationMs: 180 };
+	const merge = opts.mergeAiDepth ?? ((heuristic, ai) => mergeAiDepthIntoEdgeCanvas(heuristic as CoverDepthCanvas, ai as CoverDepthCanvas));
+	return {
+		image: merge(heuristicImage, aiImage) ?? heuristicImage,
+		aiBoostTarget: 1,
+		durationMs: 360,
+	};
+}
+
 export function createHomeCoverTextureController(
 	opts: HomeCoverTextureControllerOptions,
 ): HomeCoverTextureController {
@@ -136,6 +161,7 @@ export function createHomeCoverTextureController(
 	let currentUrl = "";
 	let token = 0;
 	let pending: Promise<void> | null = null;
+	let aiDepthEnabled = !!opts.aiDepthEnabled;
 
 	function clearCover(): void {
 		token += 1;
@@ -159,10 +185,15 @@ export function createHomeCoverTextureController(
 		const runToken = ++token;
 		if (uniforms.uLoading) uniforms.uLoading.value = 1;
 		pending = loadImage(url)
-			.then((image) => {
+			.then(async (image) => {
 				if (runToken !== token) return;
 				const preparedImage = prepareSquareCoverCanvas(image, { coverResolution, createCanvas: opts.createCanvas });
-				const edgeImage = uniforms.uEdgeTex ? buildDepthImage(preparedImage, opts) : null;
+				const heuristicEdgeImage = uniforms.uEdgeTex ? buildDepthImage(preparedImage, opts) : null;
+				const { image: edgeImage, aiBoostTarget, durationMs } = await maybeBuildAiDepthImage(preparedImage, heuristicEdgeImage, {
+					...opts,
+					aiDepthEnabled,
+				});
+				if (runToken !== token) return;
 				if (uniforms.uHasCover.value > 0.5 && uniforms.uCoverTex.value.image) {
 					markTextureImage(uniforms.uPrevCoverTex.value, uniforms.uCoverTex.value.image as HomeCoverImage);
 				}
@@ -170,7 +201,7 @@ export function createHomeCoverTextureController(
 				opts.onCoverPrepared?.(preparedImage);
 				if (edgeImage && uniforms.uEdgeTex) {
 					markTextureImage(uniforms.uEdgeTex.value, edgeImage);
-					depthTween?.setTarget(1, 0.55, 180);
+					depthTween?.setTarget(1, aiBoostTarget, durationMs);
 				} else {
 					depthTween?.setTarget(0, 0, 1);
 					resetDepthUniforms(uniforms);
@@ -196,6 +227,9 @@ export function createHomeCoverTextureController(
 
 	return {
 		setCoverUrl,
+		setAiDepthEnabled(enabled) {
+			aiDepthEnabled = !!enabled;
+		},
 		advanceColorMix,
 		advanceDepth(dtSeconds) {
 			depthTween?.advance(dtSeconds);
