@@ -298,6 +298,12 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 		return getShelfVisibility() > 0.24;
 	}
 
+	function shouldAvoidStageLyricsForShelf(): boolean {
+		if (getShelfMode() !== "side") return false;
+		if (getShelfHasOpenContent()) return true;
+		return getShelfVisibility() > 0.24;
+	}
+
 	function getLyricLayoutOptions(): Required<LyricLayoutOptions> & {
 		lockBaseDistance: number;
 		wallpaperLyricLock: boolean;
@@ -327,6 +333,15 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 			layout.lyricOffsetY = clamp(layout.lyricOffsetY + (dimForShelf ? -0.04 : 0.08), -1.2, 1.35);
 			layout.lyricOffsetZ = clamp(layout.lyricOffsetZ + (dimForShelf ? 1.02 : 1.15), -1.6, 1.6);
 			layout.lockBaseDistance = dimForShelf ? 5.58 : 4.85;
+		} else if (
+			layout.lyricCameraLock &&
+			shouldAvoidStageLyricsForShelf() &&
+			!getSkullShelfOpen()
+		) {
+			layout.lyricScale *= 0.72;
+			layout.lyricOffsetX = clamp(layout.lyricOffsetX - 1.36, -2, 2);
+			layout.lyricOffsetY = clamp(layout.lyricOffsetY + 0.06, -1.2, 1.35);
+			layout.lyricOffsetZ = clamp(layout.lyricOffsetZ + 0.72, -1.6, 1.6);
 		} else if (
 			!layout.lyricCameraLock &&
 			getShelfMode() === "side" &&
