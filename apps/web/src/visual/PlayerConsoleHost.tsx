@@ -511,7 +511,6 @@ export function PlayerConsoleHost(props: PlayerConsoleHostProps): ReactElement {
 						ref={registerNormal("fullscreen-toggle-btn")}
 						type="button"
 						onClick={toggleFullscreenStub}
-						onDoubleClick={() => noticeStub("全屏窗口控制将在 Tauri window 命令中接入")}
 						title="全屏 (F)"
 						aria-label="全屏"
 					>

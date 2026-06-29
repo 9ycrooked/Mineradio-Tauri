@@ -195,3 +195,25 @@ test("PlayerConsoleHost disables the heart button while like mutation is busy", 
 	root.unmount();
 	container.remove();
 });
+
+test("PlayerConsoleHost fullscreen button no longer emits stale Tauri placeholder notice", async () => {
+	await import("../../../../packages/visual-engine/src/runtime/happy-dom-preload");
+	const calls: string[] = [];
+	const container = document.createElement("div");
+	document.body.appendChild(container);
+	const root = createRoot(container);
+	root.render(
+		React.createElement(PlayerConsoleHost, {
+			onToggleFullscreen: () => calls.push("fullscreen"),
+			onNotice: (message) => calls.push(`notice:${message}`),
+		}),
+	);
+	await new Promise((resolve) => setTimeout(resolve, 0));
+
+	const button = container.querySelector(".fullscreen-toggle-btn") as HTMLButtonElement;
+	button.dispatchEvent(new window.MouseEvent("dblclick", { bubbles: true }));
+	button.click();
+	expect(calls).toEqual(["fullscreen"]);
+	root.unmount();
+	container.remove();
+});
