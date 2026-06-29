@@ -14,6 +14,8 @@
 
 This plan is now a subsystem reference, not the current implementation entry point. The latest audit is tracked in `docs/migration/plans/11-final-baseline-parity.md`; new visual work must enter through Phase 3 of that plan, or through a smaller child plan derived from it.
 
+2026-06-30 reaffirmation: this document remains visual subsystem background only. New visual implementation or evidence closure must be scoped through Phase 3 of `docs/migration/plans/11-final-baseline-parity.md`, and no visual, Home, shelf, playback-control, or startup gate can be closed from code-only notes without WebView2/Electron artifacts.
+
 Current review findings that must not be treated as complete:
 
 - HomeVisual is partial: the current migrated path is still short of the baseline cover/depth/edge/ripple/back-cover/float/skull/gesture/free-camera chain.

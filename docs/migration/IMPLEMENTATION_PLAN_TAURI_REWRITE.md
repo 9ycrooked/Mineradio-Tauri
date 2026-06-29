@@ -12,11 +12,13 @@
 
 ## Current Status Notice
 
-更新时间：2026-06-28
+更新时间：2026-06-30
 
 本文是 Tauri 重写早期的历史 master sequencing plan，用于说明 1-10 阶段的原始拆分、边界和设计意图。它不能作为当前直接实施入口，因为仓库已经存在多轮代码侧切片和审查结论，部分任务已经完成，部分任务仍缺少 WebView2、Windows、截图/录屏、release artifact 或 B1/B2/B3 输入证据。
 
 当前继续执行入口是：`docs/migration/plans/11-final-baseline-parity.md`。
+
+2026-06-30 reaffirmation：继续执行仍从 `docs/migration/plans/11-final-baseline-parity.md` 派生阶段任务；`docs/MIGRATION_TODO.md` 是模块清单、issue planning 和阶段 ledger，不是直接源码迁移任务列表。用户当前授权允许更新该控制计划状态，但源码迁移仍必须遵守 `docs/migration/EXECUTION_PROTOCOL.md` 与 plan 11 的 phase/gate 边界。
 
 后续 agent 必须从该最终阶段计划继续，按 Phase 0-6 收口 Home、Search、Playback、Visual Engine、sidecar lifecycle、login、desktop lyrics、updater、installer、license 和 final sign-off。旧的 `docs/migration/plans/01-*.md` 到 `10-*.md` 只作为历史子系统参考；如与 `11-final-baseline-parity.md` 或当前审查记录冲突，以最终阶段计划和真实 evidence 为准。
 

@@ -1,6 +1,6 @@
 # Baseline Capture
 
-更新时间：2026-06-28
+更新时间：2026-06-30
 
 ## Purpose
 
@@ -14,6 +14,10 @@ Code-derived animation spec: `docs/migration/baseline/BASELINE_ANIMATION_SPEC.md
 - Code-side implementation notes are not capture evidence.
 - Credential-gated Netease/QQ checks require B1 credentials and must record the login state used during capture.
 - Release/update checks must record the updater decision used for that run, especially if install is blocked by signature policy.
+
+## 2026-06-30 Reconciliation Note
+
+Previously recorded static references are orientation only. They help future agents compare framing and layout, but remaining `pending` or `blocked` capture rows still block public release parity until manually captured. Do not mark captures complete without artifact paths in metadata or a release-evidence document; large screenshots and recordings stay outside git, with only small docs/metadata committed.
 
 ## Environment
 

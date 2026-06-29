@@ -1,12 +1,13 @@
 # Capability Parity Checklist
 
-更新时间：2026-06-29
+更新时间：2026-06-30
 
 Tauri 版对外发布前必须完成本清单。Electron 当前运行效果是视觉和交互基线；二开项目不需要迁移旧用户数据，但必须达到原项目完整能力。
 
 ## 2026-06-28 当前审查对齐
 
 - 当前执行入口：`docs/migration/plans/11-final-baseline-parity.md`。旧的 `IMPLEMENTATION_PLAN_TAURI_REWRITE.md` 只作为历史 master sequencing plan 和阶段背景，不作为当前直接实施入口。
+- 2026-06-30 Phase 0 reconciliation：当前执行入口仍是 `docs/migration/plans/11-final-baseline-parity.md`；`docs/MIGRATION_TODO.md` 仅作为模块/issue planning 与阶段 ledger，不替代 `EXECUTION_PROTOCOL` 或 plan 11。未因本次文档对齐新增勾选任何 capability gate；没有 WebView2/Electron 对照、账号态、Windows 安装器、release artifact 或 artifact path 的项目保持 unchecked。
 - `417cedc` 仅是 post-splash Empty Home mitigation：修复 splash 后黑屏/空壳风险，让 Empty Home mitigation 能出现；它不是 Home parity，不能据此勾选 Home、Search、Bottom controls、Playback 或 Visual parity gate。
 - `8b86051` 已移除 web debug shell。后续手动验收必须确认 WebView2 中没有 debug shell 回归。
 - `b0186dd` 已在代码侧恢复 splash ready gate。启动动画仍需要 Electron baseline 对照录屏和 WebView2 手动证据后才能勾选 parity。

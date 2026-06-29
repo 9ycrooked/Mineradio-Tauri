@@ -84,19 +84,19 @@ This plan supersedes using the old master implementation plan as a direct execut
 - Playback/provider: `server.js` Netease/QQ routes, audio proxy, and `public/index.html` search/queue/playback functions.
 - Windows/runtime: `desktop/main.js` login windows, desktop lyrics, update behavior.
 
-- [ ] **Step 1: Record the audit state**
+- [x] **Step 1: Record the audit state**
 
   Add a dated note to `CAPABILITY_PARITY_CHECKLIST.md` explaining that `417cedc` is a code-side mitigation for post-splash blackness, not Home parity. Record that Home parity now has its own execution phase and gate.
 
-- [ ] **Step 2: Mark stale plan areas**
+- [x] **Step 2: Mark stale plan areas**
 
   Update `IMPLEMENTATION_PLAN_TAURI_REWRITE.md` and the affected `08`/`10` plans with short notes that the directories and many code slices already exist, and that final implementation must continue from `11-final-baseline-parity.md`.
 
-- [ ] **Step 3: Fill missing baseline capture metadata**
+- [x] **Step 3: Fill missing baseline capture metadata**
 
   Update `BASELINE_CAPTURE.md` with the current required capture list for Home, search, bottom controls, playback, 3D shelf, desktop lyrics, and updater installer checks. Do not mark captures complete unless artifact paths exist.
 
-- [ ] **Step 4: Verify documentation-only phase**
+- [x] **Step 4: Verify documentation-only phase**
 
   Run:
 
@@ -107,7 +107,9 @@ This plan supersedes using the old master implementation plan as a direct execut
 
   Expected: `git diff --check` exits 0.
 
-- [ ] **Step 5: Review and commit**
+- [x] **Step 5: Review and commit**
+
+  2026-06-30 controller note: spec compliance and code quality reviews passed; this single Phase 0 commit records docs-only reconciliation.
 
   Review that no capability checkbox was incorrectly checked from code-only evidence.
 

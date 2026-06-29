@@ -14,6 +14,8 @@
 
 This plan is now a subsystem reference, not the current implementation entry point. The latest audit is tracked in `docs/migration/plans/11-final-baseline-parity.md`; new updater, release, installer, and license work must enter through Phase 5 of that plan, or through a smaller child plan derived from it.
 
+2026-06-30 reaffirmation: this document remains updater/release/license subsystem background only. New release, installer, updater, license, notice, or public-signoff work must be scoped through Phase 5 of `docs/migration/plans/11-final-baseline-parity.md`, and no release gate can be closed without the required manifest, upload, installer, packaged-notice, Windows, or updater evidence.
+
 Current review findings that must not be treated as complete:
 
 - Updater is detection-only: code-side detection/status plumbing exists, but download/install/restart is still blocked until the updater signature/public-key path is resolved.
