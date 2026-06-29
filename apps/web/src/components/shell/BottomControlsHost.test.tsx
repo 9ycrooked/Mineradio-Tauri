@@ -108,3 +108,35 @@ test("BottomControlsHost mirrors baseline bottom handle wake and auto-hide hover
 	container.remove();
 	document.body.className = "";
 });
+
+test("BottomControlsHost keeps the visible console open while the pointer is over the bar", async () => {
+	await import("../../../../../packages/visual-engine/src/runtime/happy-dom-preload");
+	document.body.className = "";
+	const container = document.createElement("div");
+	document.body.appendChild(container);
+	const root = createRoot(container);
+	flushSync(() => root.render(
+		React.createElement(BottomControlsHost, {
+			visible: true,
+			miniQueueOpen: false,
+			onReveal: () => {},
+			onHide: () => {},
+		}),
+	));
+	await new Promise((resolve) => setTimeout(resolve, 0));
+
+	const bar = container.querySelector("#bottom-bar") as HTMLDivElement;
+	expect(bar.classList.contains("visible")).toBe(true);
+	expect(bar.classList.contains("soft-hidden")).toBe(false);
+
+	bar.dispatchEvent(new window.MouseEvent("mouseenter", { bubbles: true }));
+	bar.dispatchEvent(new window.Event("pointerenter", { bubbles: true }));
+	await new Promise((resolve) => setTimeout(resolve, 560));
+
+	expect(bar.classList.contains("visible")).toBe(true);
+	expect(bar.classList.contains("soft-hidden")).toBe(false);
+
+	root.unmount();
+	container.remove();
+	document.body.className = "";
+});

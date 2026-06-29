@@ -68,6 +68,7 @@ export interface BottomControlsHostProps {
 export function BottomControlsHost(props: BottomControlsHostProps): ReactElement {
 	const handleRef = useRef<HTMLButtonElement | null>(null);
 	const propsRef = useRef(props);
+	const hoveringRef = useRef(false);
 	propsRef.current = props;
 
 	useEffect(() => {
@@ -83,7 +84,6 @@ export function BottomControlsHost(props: BottomControlsHostProps): ReactElement
 			(typeof window !== "undefined" ? window.clearTimeout.bind(window) : undefined);
 		let hideTimer: number | null = null;
 		let handleTimer: number | null = null;
-		let hovering = false;
 
 		const clearHideTimer = () => {
 			if (hideTimer != null && clearTimeoutRef) clearTimeoutRef(hideTimer);
@@ -111,23 +111,23 @@ export function BottomControlsHost(props: BottomControlsHostProps): ReactElement
 			if (!setTimeoutRef) return;
 			hideTimer = setTimeoutRef(() => {
 				hideTimer = null;
-				if (!hovering) propsRef.current.onHide?.();
+				if (!hoveringRef.current) propsRef.current.onHide?.();
 			}, delay);
 		};
 		const enterControls = () => {
 			if (suppressed()) return;
-			hovering = true;
+			hoveringRef.current = true;
 			wakeBottomHandle();
 			clearHideTimer();
 		};
 		const leaveControls = () => {
-			hovering = false;
+			hoveringRef.current = false;
 			scheduleHide(480);
 			wakeBottomHandle(900);
 		};
 		const enterHandle = () => {
 			if (suppressed()) return;
-			hovering = true;
+			hoveringRef.current = true;
 			wakeBottomHandle();
 			propsRef.current.onReveal();
 			clearHideTimer();
@@ -153,6 +153,7 @@ export function BottomControlsHost(props: BottomControlsHostProps): ReactElement
 			handle.removeEventListener("click", clickHandle);
 			clearHideTimer();
 			clearHandleTimer();
+			hoveringRef.current = false;
 			document.body.classList.remove("controls-handle-awake");
 		};
 	}, []);
@@ -222,6 +223,8 @@ export function BottomControlsHost(props: BottomControlsHostProps): ReactElement
 				lyricSourceMode={props.lyricSourceMode}
 				hasCustomLyric={props.hasCustomLyric}
 				deps={{
+					controlsHovering: () => hoveringRef.current,
+					miniQueueOpen: () => propsRef.current.miniQueueOpen === true,
 					isHomeControlsLocked: props.deps?.isHomeControlsLocked,
 					isShelfSuppressed: props.deps?.isSuppressed,
 				}}
