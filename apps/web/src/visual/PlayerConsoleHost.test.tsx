@@ -147,3 +147,51 @@ test("PlayerConsoleHost routes the collect button to the baseline collect picker
 	root.unmount();
 	container.remove();
 });
+
+test("PlayerConsoleHost renders liked heart state and forwards current like clicks", async () => {
+	await import("../../../../packages/visual-engine/src/runtime/happy-dom-preload");
+	let toggles = 0;
+	const container = document.createElement("div");
+	document.body.appendChild(container);
+	const root = createRoot(container);
+	root.render(
+		React.createElement(PlayerConsoleHost, {
+			currentLiked: true,
+			onToggleLikeCurrent: () => { toggles += 1; },
+		}),
+	);
+	await new Promise((resolve) => setTimeout(resolve, 0));
+
+	const button = container.querySelector("#heart-btn") as HTMLButtonElement;
+	expect(button.className).toContain("liked");
+	expect(button.className).toContain("active");
+	expect(button.getAttribute("aria-pressed")).toBe("true");
+	expect(button.title).toBe("取消红心");
+	button.click();
+	expect(toggles).toBe(1);
+	root.unmount();
+	container.remove();
+});
+
+test("PlayerConsoleHost disables the heart button while like mutation is busy", async () => {
+	await import("../../../../packages/visual-engine/src/runtime/happy-dom-preload");
+	let toggles = 0;
+	const container = document.createElement("div");
+	document.body.appendChild(container);
+	const root = createRoot(container);
+	root.render(
+		React.createElement(PlayerConsoleHost, {
+			currentLikeBusy: true,
+			onToggleLikeCurrent: () => { toggles += 1; },
+		}),
+	);
+	await new Promise((resolve) => setTimeout(resolve, 0));
+
+	const button = container.querySelector("#heart-btn") as HTMLButtonElement;
+	expect(button.disabled).toBe(true);
+	expect(button.className).toContain("busy");
+	button.click();
+	expect(toggles).toBe(0);
+	root.unmount();
+	container.remove();
+});

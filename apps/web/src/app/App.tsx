@@ -240,6 +240,38 @@ function trackArtist(track: Track | null | undefined): string {
   return track?.artists?.join(" / ") || track?.album || "";
 }
 
+function trackLikeKey(track: Track | null | undefined): string {
+  return track?.provider && track.id ? `${track.provider}:${track.id}` : "";
+}
+
+function isNeteaseLikeSupported(track: Track | null | undefined): track is Track {
+  if (!track?.id) return false;
+  const record = track as unknown as Record<string, unknown>;
+  if (record.type === "local" || record.source === "local") return false;
+  if (record.type === "podcast" || record.source === "podcast") return false;
+  return track.provider === "netease";
+}
+
+function likeUnsupportedMessage(track: Track | null | undefined): string {
+  const record = track as unknown as Record<string, unknown> | null | undefined;
+  if (
+    track?.provider === "qq" ||
+    record?.provider === "qq" ||
+    record?.source === "qq" ||
+    record?.type === "qq"
+  ) {
+    return "QQ 音乐红心同步待登录接口接入";
+  }
+  return "本地文件暂不支持红心同步";
+}
+
+function isLoginRequiredError(error: unknown): boolean {
+  return (
+    error instanceof SidecarClientError ||
+    (typeof error === "object" && error !== null && "code" in error)
+  ) && (error as { code?: unknown }).code === "LOGIN_REQUIRED";
+}
+
 function trialBannerText(result: SongUrlResult): string {
   if (result.message?.trim()) return result.message.trim();
   if (result.loggedIn && result.vipLevel === "svip")
@@ -542,6 +574,8 @@ export function App({
   const [collectBusyPlaylistId, setCollectBusyPlaylistId] = useState<
     string | null
   >(null);
+  const [likedSongMap, setLikedSongMap] = useState<Record<string, boolean>>({});
+  const [likeBusyMap, setLikeBusyMap] = useState<Record<string, boolean>>({});
   const [desktopWindowState, setDesktopWindowState] =
     useState<WindowState | null>(null);
 
@@ -625,6 +659,11 @@ export function App({
     beatPulse: 0,
     bass: 0,
   });
+  const likedSongMapRef = useRef(likedSongMap);
+  likedSongMapRef.current = likedSongMap;
+  const likeBusyMapRef = useRef(likeBusyMap);
+  likeBusyMapRef.current = likeBusyMap;
+  const likeStatusRequestSeqRef = useRef(0);
 
   const positionRef = useRef(positionMs);
   positionRef.current = positionMs;
@@ -665,6 +704,9 @@ export function App({
     emptyHomeCoreAllowed;
   const currentLyricPreference = getCustomLyricPreferenceForTrack(currentTrack);
   const currentCustomLyricText = getCustomLyricTextForTrack(currentTrack);
+  const currentLikeKey = trackLikeKey(currentTrack);
+  const currentLiked = currentLikeKey ? likedSongMap[currentLikeKey] === true : false;
+  const currentLikeBusy = currentLikeKey ? likeBusyMap[currentLikeKey] === true : false;
   void customLyricVersion;
 
   const revealConsole = useCallback(() => {
@@ -1077,6 +1119,47 @@ export function App({
       sidecarClient,
     ],
   );
+
+  const toggleLikeCurrent = useCallback(async () => {
+    const track = usePlaybackStore.getState().currentTrack;
+    if (!isNeteaseLikeSupported(track)) {
+      showToast(likeUnsupportedMessage(track));
+      return;
+    }
+    const client = sidecarClient;
+    const key = trackLikeKey(track);
+    if (!client || !key || likeBusyMapRef.current[key]) {
+      if (!client) showToast("红心操作失败");
+      return;
+    }
+
+    const previous = likedSongMapRef.current[key] === true;
+    const next = !previous;
+    setLikeBusyMap((map) => ({ ...map, [key]: true }));
+    setLikedSongMap((map) => ({ ...map, [key]: next }));
+    try {
+      const ack = await client.likeSong(track.provider, track.id, next);
+      setLikedSongMap((map) => ({
+        ...map,
+        [key]: ack.liked === true,
+      }));
+      showToast(next ? "已加入红心喜欢" : "已取消红心");
+    } catch (e) {
+      setLikedSongMap((map) => ({ ...map, [key]: previous }));
+      if (isLoginRequiredError(e)) {
+        showToast("登录后可同步到网易云");
+        setLoginModalOpen(true);
+      } else {
+        showToast("红心操作失败");
+      }
+    } finally {
+      setLikeBusyMap((map) => {
+        const nextMap = { ...map };
+        delete nextMap[key];
+        return nextMap;
+      });
+    }
+  }, [showToast, sidecarClient]);
 
   const closeLoginModal = useCallback(() => {
     setLoginModalOpen(false);
@@ -1806,6 +1889,26 @@ export function App({
   ]);
 
   useEffect(() => {
+    const track = currentTrack;
+    const client = sidecarClient;
+    if (!client || !isNeteaseLikeSupported(track)) return;
+    const checkSongLikes = (client as { checkSongLikes?: SidecarClient["checkSongLikes"] }).checkSongLikes;
+    if (typeof checkSongLikes !== "function") return;
+    const key = trackLikeKey(track);
+    if (!key) return;
+    const token = ++likeStatusRequestSeqRef.current;
+    void checkSongLikes.call(client, track.provider, [track.id]).then((ack) => {
+      if (token !== likeStatusRequestSeqRef.current) return;
+      setLikedSongMap((map) => ({
+        ...map,
+        [key]: ack.liked[track.id] === true,
+      }));
+    }).catch(() => {
+      // 红心状态只影响按钮高亮，失败不能阻断播放 UI。
+    });
+  }, [currentTrack, sidecarClient]);
+
+  useEffect(() => {
     const controller = controllerRef.current;
     const client = sidecarClient;
     if (!controller || !client) return;
@@ -2089,6 +2192,7 @@ export function App({
         }}
         onOpenCustomLyrics={openCustomLyricModal}
         onCollectCurrent={openCollectPickerForCurrent}
+        onToggleLikeCurrent={toggleLikeCurrent}
         onClose={() => {
           setConsole(false);
           setMiniQueue(false);
@@ -2114,6 +2218,8 @@ export function App({
         currentTitle={currentTrack?.title}
         currentArtist={currentTrack?.artists.join(" / ")}
         currentCoverUrl={currentTrack?.coverUrl}
+        currentLiked={currentLiked}
+        currentLikeBusy={currentLikeBusy}
         queue={queue}
         currentTrack={currentTrack}
         miniQueueOpen={miniQueueOpen}

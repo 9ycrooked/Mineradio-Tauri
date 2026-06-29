@@ -16,6 +16,7 @@ export interface BottomControlsHostProps {
 	onLyricSourceChange?: (mode: "original" | "custom") => void;
 	onOpenCustomLyrics?: () => void;
 	onCollectCurrent?: () => void;
+	onToggleLikeCurrent?: () => void;
 	onClose?: () => void;
 	onNotice?: (message: string) => void;
 	onSeek?: (positionMs: number) => void;
@@ -38,6 +39,8 @@ export interface BottomControlsHostProps {
 	currentTitle?: string;
 	currentArtist?: string;
 	currentCoverUrl?: string;
+	currentLiked?: boolean;
+	currentLikeBusy?: boolean;
 	queue?: Track[];
 	currentTrack?: Track | null;
 	miniQueueOpen?: boolean;
@@ -81,6 +84,7 @@ export function BottomControlsHost(props: BottomControlsHostProps): ReactElement
 				onLyricSourceChange={props.onLyricSourceChange}
 				onOpenCustomLyrics={props.onOpenCustomLyrics}
 				onCollectCurrent={props.onCollectCurrent}
+				onToggleLikeCurrent={props.onToggleLikeCurrent}
 				onClose={props.onClose}
 				onNotice={props.onNotice}
 				onSeek={props.onSeek}
@@ -103,6 +107,8 @@ export function BottomControlsHost(props: BottomControlsHostProps): ReactElement
 				currentTitle={props.currentTitle}
 				currentArtist={props.currentArtist}
 				currentCoverUrl={props.currentCoverUrl}
+				currentLiked={props.currentLiked}
+				currentLikeBusy={props.currentLikeBusy}
 				queue={props.queue}
 				currentTrack={props.currentTrack}
 				miniQueueOpen={props.miniQueueOpen}

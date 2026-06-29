@@ -18,7 +18,7 @@ import type { SidecarStatus, RuntimeConfig } from "../tauri/runtime";
 import { useLyricsStore } from "../stores/lyrics-store";
 import { usePlaybackStore } from "../stores/playback-store";
 import { CUSTOM_LYRIC_PREF_STORE_KEY, CUSTOM_LYRIC_STORE_KEY } from "../lyrics/custom-lyrics";
-import type { SidecarClient } from "../api/sidecar-client";
+import { SidecarClientError, type SidecarClient } from "../api/sidecar-client";
 import type { VisualEngineHostProps } from "../visual/VisualEngineHost";
 import { cloneFxState } from "@mineradio/visual-engine";
 import type { Track } from "@mineradio/shared";
@@ -1099,4 +1099,296 @@ test("App opens the collect picker for QQ detail rows and filters to writable QQ
 	root.unmount();
 	host.remove();
 	localStorage.clear();
+});
+
+test("App checks current Netease like state and wires bottom heart mutations through sidecar", async () => {
+	await import("../../../../packages/visual-engine/src/runtime/happy-dom-preload");
+	(globalThis as unknown as { localStorage: Storage }).localStorage = window.localStorage;
+	const restoreAudio = installAppStubAudio();
+	localStorage.clear();
+	usePlaybackStore.getState().clearQueue();
+	useLyricsStore.getState().reset();
+	usePlaybackStore.getState().setCurrentTrack({
+		provider: "netease",
+		id: "like-current-1",
+		sourceId: "like-current-1",
+		title: "Like Song",
+		artists: ["Alice"],
+		album: "",
+		coverUrl: "",
+		durationMs: 10000,
+		qualityHints: [],
+		playableState: "playable",
+	});
+
+	const checked: string[][] = [];
+	const likedCalls: Array<{ provider: string; id: string; liked: boolean }> = [];
+	const fakeClient = {
+		async checkSongLikes(_provider: string, ids: string[]) {
+			checked.push(ids);
+			return { provider: "netease", ids, liked: { "like-current-1": true } };
+		},
+		async likeSong(provider: string, id: string, liked: boolean) {
+			likedCalls.push({ provider, id, liked });
+			return { provider, id, liked, code: 200 };
+		},
+		async resolveSongUrl() {
+			return { url: "https://example.com/audio.mp3", quality: "standard", proxied: true };
+		},
+		audioProxyUrl(url: string) {
+			return url;
+		},
+		async lyric() {
+			throw new Error("lyric api failed");
+		},
+	} as unknown as SidecarClient;
+	const rootConfig: RuntimeConfig = {
+		sidecarBaseUrl: "http://127.0.0.1:39999",
+		appDataDir: "",
+		appVersion: "0.0.0-test",
+		schemaVersion: "0.1.0",
+		updaterPublicKeyConfigured: false,
+	};
+	const host = document.createElement("div");
+	document.body.appendChild(host);
+	const root = createRoot(host);
+	flushSync(() => root.render(<App SplashComponent={() => null} VisualComponent={() => <div id="visual-host" />} createSidecarClient={() => fakeClient} initialRuntimeConfig={rootConfig} />));
+
+	for (let i = 0; i < 8 && checked.length === 0; i += 1) {
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	}
+	expect(checked).toEqual([["like-current-1"]]);
+	for (let i = 0; i < 8 && !host.querySelector("#heart-btn")?.className.includes("liked"); i += 1) {
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	}
+	const heart = host.querySelector("#heart-btn") as HTMLButtonElement;
+	expect(heart.className).toContain("liked");
+	expect(heart.getAttribute("aria-pressed")).toBe("true");
+
+	heart.click();
+	for (let i = 0; i < 8 && likedCalls.length === 0; i += 1) {
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	}
+
+	expect(likedCalls).toEqual([{ provider: "netease", id: "like-current-1", liked: false }]);
+	for (let i = 0; i < 8 && !host.querySelector("#toast.show")?.textContent?.includes("已取消红心"); i += 1) {
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	}
+	expect(host.querySelector("#toast.show")?.textContent).toContain("已取消红心");
+
+	root.unmount();
+	host.remove();
+	usePlaybackStore.getState().clearQueue();
+	useLyricsStore.getState().reset();
+	localStorage.clear();
+	restoreAudio();
+});
+
+test("App shows QQ unsupported notice for bottom heart without calling like mutation", async () => {
+	await import("../../../../packages/visual-engine/src/runtime/happy-dom-preload");
+	(globalThis as unknown as { localStorage: Storage }).localStorage = window.localStorage;
+	const restoreAudio = installAppStubAudio();
+	localStorage.clear();
+	usePlaybackStore.getState().clearQueue();
+	useLyricsStore.getState().reset();
+	usePlaybackStore.getState().setCurrentTrack({
+		provider: "qq",
+		id: "qq-like-unsupported",
+		sourceId: "qq-like-unsupported",
+		title: "QQ Song",
+		artists: ["Bob"],
+		album: "",
+		coverUrl: "",
+		durationMs: 10000,
+		qualityHints: [],
+		playableState: "playable",
+	});
+
+	let likeCalled = 0;
+	const fakeClient = {
+		async checkSongLikes() {
+			throw new Error("QQ should not run like check");
+		},
+		async likeSong() {
+			likeCalled += 1;
+			throw new Error("QQ should not run like mutation");
+		},
+		async resolveSongUrl() {
+			return { url: "https://example.com/audio.mp3", quality: "standard", proxied: true };
+		},
+		audioProxyUrl(url: string) {
+			return url;
+		},
+		async lyric() {
+			throw new Error("lyric api failed");
+		},
+	} as unknown as SidecarClient;
+	const rootConfig: RuntimeConfig = {
+		sidecarBaseUrl: "http://127.0.0.1:39999",
+		appDataDir: "",
+		appVersion: "0.0.0-test",
+		schemaVersion: "0.1.0",
+		updaterPublicKeyConfigured: false,
+	};
+	const host = document.createElement("div");
+	document.body.appendChild(host);
+	const root = createRoot(host);
+	flushSync(() => root.render(<App SplashComponent={() => null} VisualComponent={() => <div id="visual-host" />} createSidecarClient={() => fakeClient} initialRuntimeConfig={rootConfig} />));
+	await new Promise((resolve) => setTimeout(resolve, 0));
+
+	(host.querySelector("#heart-btn") as HTMLButtonElement).click();
+	for (let i = 0; i < 8 && !host.querySelector("#toast.show")?.textContent?.includes("QQ 音乐红心同步待登录接口接入"); i += 1) {
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	}
+
+	expect(likeCalled).toBe(0);
+	expect(host.querySelector("#toast.show")?.textContent).toContain("QQ 音乐红心同步待登录接口接入");
+
+	root.unmount();
+	host.remove();
+	usePlaybackStore.getState().clearQueue();
+	useLyricsStore.getState().reset();
+	localStorage.clear();
+	restoreAudio();
+});
+
+test("App rolls back bottom heart state and shows baseline failure copy when Netease like fails", async () => {
+	await import("../../../../packages/visual-engine/src/runtime/happy-dom-preload");
+	(globalThis as unknown as { localStorage: Storage }).localStorage = window.localStorage;
+	const restoreAudio = installAppStubAudio();
+	localStorage.clear();
+	usePlaybackStore.getState().clearQueue();
+	useLyricsStore.getState().reset();
+	usePlaybackStore.getState().setCurrentTrack({
+		provider: "netease",
+		id: "like-fail-1",
+		sourceId: "like-fail-1",
+		title: "Fail Song",
+		artists: ["Alice"],
+		album: "",
+		coverUrl: "",
+		durationMs: 10000,
+		qualityHints: [],
+		playableState: "playable",
+	});
+
+	const fakeClient = {
+		async checkSongLikes(_provider: string, ids: string[]) {
+			return { provider: "netease", ids, liked: { "like-fail-1": false } };
+		},
+		async likeSong() {
+			throw new Error("like failed");
+		},
+		async resolveSongUrl() {
+			return { url: "https://example.com/audio.mp3", quality: "standard", proxied: true };
+		},
+		audioProxyUrl(url: string) {
+			return url;
+		},
+		async lyric() {
+			throw new Error("lyric api failed");
+		},
+	} as unknown as SidecarClient;
+	const rootConfig: RuntimeConfig = {
+		sidecarBaseUrl: "http://127.0.0.1:39999",
+		appDataDir: "",
+		appVersion: "0.0.0-test",
+		schemaVersion: "0.1.0",
+		updaterPublicKeyConfigured: false,
+	};
+	const host = document.createElement("div");
+	document.body.appendChild(host);
+	const root = createRoot(host);
+	flushSync(() => root.render(<App SplashComponent={() => null} VisualComponent={() => <div id="visual-host" />} createSidecarClient={() => fakeClient} initialRuntimeConfig={rootConfig} />));
+	await new Promise((resolve) => setTimeout(resolve, 0));
+
+	(host.querySelector("#heart-btn") as HTMLButtonElement).click();
+	for (let i = 0; i < 8 && !host.querySelector("#toast.show")?.textContent?.includes("红心操作失败"); i += 1) {
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	}
+
+	const heart = host.querySelector("#heart-btn") as HTMLButtonElement;
+	expect(host.querySelector("#toast.show")?.textContent).toContain("红心操作失败");
+	expect(heart.getAttribute("aria-pressed")).toBe("false");
+	expect(heart.className).not.toContain("liked");
+
+	root.unmount();
+	host.remove();
+	usePlaybackStore.getState().clearQueue();
+	useLyricsStore.getState().reset();
+	localStorage.clear();
+	restoreAudio();
+});
+
+test("App opens login modal when Netease heart mutation requires login", async () => {
+	await import("../../../../packages/visual-engine/src/runtime/happy-dom-preload");
+	(globalThis as unknown as { localStorage: Storage }).localStorage = window.localStorage;
+	const restoreAudio = installAppStubAudio();
+	localStorage.clear();
+	usePlaybackStore.getState().clearQueue();
+	useLyricsStore.getState().reset();
+	usePlaybackStore.getState().setCurrentTrack({
+		provider: "netease",
+		id: "like-login-required",
+		sourceId: "like-login-required",
+		title: "Login Song",
+		artists: ["Alice"],
+		album: "",
+		coverUrl: "",
+		durationMs: 10000,
+		qualityHints: [],
+		playableState: "playable",
+	});
+
+	const fakeClient = {
+		async checkSongLikes(_provider: string, ids: string[]) {
+			return { provider: "netease", ids, liked: { "like-login-required": false } };
+		},
+		async likeSong() {
+			throw new SidecarClientError({
+				code: "LOGIN_REQUIRED",
+				message: "login required",
+				provider: "netease",
+				retryable: false,
+				action: "login",
+			});
+		},
+		async resolveSongUrl() {
+			return { url: "https://example.com/audio.mp3", quality: "standard", proxied: true };
+		},
+		audioProxyUrl(url: string) {
+			return url;
+		},
+		async lyric() {
+			throw new Error("lyric api failed");
+		},
+	} as unknown as SidecarClient;
+	const rootConfig: RuntimeConfig = {
+		sidecarBaseUrl: "http://127.0.0.1:39999",
+		appDataDir: "",
+		appVersion: "0.0.0-test",
+		schemaVersion: "0.1.0",
+		updaterPublicKeyConfigured: false,
+	};
+	const host = document.createElement("div");
+	document.body.appendChild(host);
+	const root = createRoot(host);
+	flushSync(() => root.render(<App SplashComponent={() => null} VisualComponent={() => <div id="visual-host" />} createSidecarClient={() => fakeClient} initialRuntimeConfig={rootConfig} />));
+	await new Promise((resolve) => setTimeout(resolve, 0));
+
+	(host.querySelector("#heart-btn") as HTMLButtonElement).click();
+	for (let i = 0; i < 8 && !host.querySelector("#login-modal"); i += 1) {
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	}
+
+	expect(host.querySelector("#toast.show")?.textContent).toContain("登录后可同步到网易云");
+	expect(host.querySelector("#login-modal")).not.toBeNull();
+	expect(host.querySelector("#heart-btn")?.className).not.toContain("liked");
+
+	root.unmount();
+	host.remove();
+	usePlaybackStore.getState().clearQueue();
+	useLyricsStore.getState().reset();
+	localStorage.clear();
+	restoreAudio();
 });

@@ -1312,6 +1312,17 @@ html.control-glass-svg-ok #bottom-bar.visible {
   color: #fff;
 }
 
+#heart-btn.liked {
+  color: #ff6d8f;
+  text-shadow: 0 0 14px rgba(255, 96, 142, .36);
+}
+
+#heart-btn.busy,
+#heart-btn:disabled {
+  cursor: wait;
+  opacity: .62;
+}
+
 #play-btn {
   width: 58px;
   height: 58px;

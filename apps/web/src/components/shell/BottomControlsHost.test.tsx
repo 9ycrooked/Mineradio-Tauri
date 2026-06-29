@@ -28,3 +28,28 @@ test("BottomControlsHost forwards window chrome callbacks to the player console"
 	root.unmount();
 	container.remove();
 });
+
+test("BottomControlsHost forwards current heart state and click callback", async () => {
+	await import("../../../../../packages/visual-engine/src/runtime/happy-dom-preload");
+	const calls: string[] = [];
+	const container = document.createElement("div");
+	document.body.appendChild(container);
+	const root = createRoot(container);
+	root.render(
+		React.createElement(BottomControlsHost, {
+			visible: true,
+			onReveal: () => calls.push("reveal"),
+			currentLiked: true,
+			onToggleLikeCurrent: () => calls.push("like"),
+		}),
+	);
+	await new Promise((resolve) => setTimeout(resolve, 0));
+
+	const button = container.querySelector("#heart-btn") as HTMLButtonElement;
+	expect(button.className).toContain("liked");
+	expect(button.getAttribute("aria-pressed")).toBe("true");
+	button.click();
+	expect(calls).toEqual(["like"]);
+	root.unmount();
+	container.remove();
+});
