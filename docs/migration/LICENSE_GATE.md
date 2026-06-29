@@ -59,7 +59,7 @@
 - [x] GSAP 使用范围已确认不含会员/闭源插件。 — 2026-06-29 code-side scan 仅发现 `gsap` 与标准包 `gsap/CustomEase` lazy import；未发现 Club/member/private plugin import，`license-transitive:check` 对 `gsap` 使用显式 standard-package allowlist。
 - [x] QQ provider 参考项目 license 审核完成。  — DECISIONS.md A6 已锁 `jsososo/QQMusicApi` / npm `qq-music-api` 为 GPL-3.0 可接入；`sansenjian/qq-music-api` 因 README 非商业附加条款与 GPL-3.0 冲突不接入。
 - [ ] 打包产物包含必要 license/notice 文件。  — 2026-06-29 packaged notices code-side policy complete：`tauri.conf.json` 已通过 `bundle.resources` 声明打包 `LICENSE`、`NOTICE.md`、`THIRD_PARTY_NOTICES.md`、`PRIVACY.md`、`SECURITY.md`，并新增 `npm run packaged-notices:check` 防回退；仍需 Windows 安装包/安装后目录产物验证后再勾选。
-- [ ] Release notes 不暗示本项目是网易云、QQ 音乐或原 Mineradio 官方版本。
+- [ ] Release notes 不暗示本项目是网易云、QQ 音乐或原 Mineradio 官方版本。 — 2026-06-29 release notes policy code-side guard complete：新增 `docs/migration/release-notes-template.md` 和 `npm run release-notes-policy:check`，静态要求发布说明声明 `Mineradio Tauri Rewrite`、GPL-3.0 二开/fork/rewrite、`zzstar101/Mineradio` 发布通道、非网易云音乐/QQ 音乐/原 Mineradio 官方版本、旧 Electron patch JSON updater 不迁移，以及 B2 未签名时 detection-only 不下载/安装更新。真实 GitHub Release notes 尚未发布/核验，所以不勾选。
 
 ## 发布前未解决项
 
@@ -70,7 +70,7 @@
 - GSAP standard-only final check：2026-06-29 code-side complete；源码扫描只发现 `gsap` 与标准包 `gsap/CustomEase`，未发现 Club/member/闭源插件、私有插件或未授权商业资产。若后续新增 GSAP 插件 import，必须重新审核。
 - Direct dependency allowlist enforcement：`npm run license:check` 会检查 Tauri 迁移目标 workspace manifests 和 `apps/desktop/src-tauri/Cargo.toml` 的直接依赖，要求它们全部进入 Dependency Audit 表且 Decision 不为 `待审核`。该检查不替代 Rust/npm transitive full audit。
 - packaged notices inclusion：`npm run packaged-notices:check` 会静态检查 Tauri bundle resources 已声明 `LICENSE`、`NOTICE.md`、`THIRD_PARTY_NOTICES.md`、`PRIVACY.md`、`SECURITY.md`；公开发布前仍必须验证 Windows 安装包/安装后目录真实包含这些文件及必要第三方 license 文本。
-- release notes wording：真实 GitHub Release notes 必须明确本项目是 GPL-3.0 二开/fork/rewrite，不暗示网易云音乐、QQ 音乐或原 Mineradio 官方身份。
+- release notes wording：`npm run release-notes-policy:check` 会静态检查 `docs/migration/release-notes-template.md` 具备 GPL-3.0 二开/fork/rewrite、非网易云音乐/QQ 音乐/原 Mineradio 官方身份、`zzstar101/Mineradio`、旧 Electron patch JSON 不迁移和 detection-only updater 限制措辞；真实 GitHub Release notes 必须以该模板为基准并在发布后核验，才能关闭此 gate。
 - updater signature/release artifact relation：`npm run updater-policy:check` 会在 B2 pubkey 为空时静态锁定 detection-only：Tauri updater endpoint 仍指向 `zzstar101/Mineradio`，Rust/web 不暴露 download/install helper，UI 保留 `signature-key-missing` 不可安装文案；公开发布前仍必须在最终发布路径下明确 Tauri updater manifest、签名字段、公钥配置、安装包资产和 release 上传资产之间的关系。若继续 detection-only，不得展示可安装更新为已通过 gate，且需在 release notes/UI 中说明。
 - transitive license enforcement：`npm run license-transitive:check` 会检查迁移目标 workspace 的 npm 运行/构建依赖闭包与 Tauri Rust crates；Bun optional platform packages 缺失不会导致当前平台失败，GSAP 标准包、`qq-music-api` GPL-3.0、legacy `css`/`uglify-js` metadata 缺口通过脚本 override 明确记录。该检查不替代安装包内 notices 真实包含验证。
 
