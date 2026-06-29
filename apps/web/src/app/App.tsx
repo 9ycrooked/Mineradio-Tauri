@@ -58,6 +58,7 @@ import {
   createDesktopLyricsPushState,
   shouldPushDesktopLyricsPayload,
 } from "../desktop-lyrics/desktop-lyrics-push";
+import { buildDesktopLyricSnapshot } from "../desktop-lyrics/desktop-lyrics-snapshot";
 import {
   SidecarRecoveryNotice,
   type SidecarRecoveryNoticeState,
@@ -1244,15 +1245,13 @@ export function App({
     [setPositionMs, showToast],
   );
 
-  const currentDesktopLyricText = useCallback(() => {
+  const currentDesktopLyricSnapshot = useCallback(() => {
     const payload = useLyricsStore.getState().payload;
-    const position = usePlaybackStore.getState().positionMs;
-    const index = selectCurrentIndex(position, payload);
-    const line = index >= 0 ? payload?.lines[index] : null;
-    const text = line?.text?.trim();
-    if (text) return text;
-    const track = usePlaybackStore.getState().currentTrack;
-    return track ? `${track.title} - ${track.artists.join(" / ")}` : "";
+    const playback = usePlaybackStore.getState();
+    const fallback = playback.currentTrack
+      ? `${trackTitle(playback.currentTrack)} - ${trackArtist(playback.currentTrack)}`
+      : "";
+    return buildDesktopLyricSnapshot(payload, playback.positionMs, fallback);
   }, []);
 
   const toggleDesktopLyrics = useCallback(async () => {
@@ -1263,15 +1262,16 @@ export function App({
     }
     const playback = usePlaybackStore.getState();
     const duration = playback.durationMs ?? 0;
-    const text = currentDesktopLyricText();
+    const snapshot = currentDesktopLyricSnapshot();
     const payload = buildDesktopLyricsPayloadPatch(
       useVisualStore.getState().fx,
-      text,
-      duration > 0 ? playback.positionMs / duration : 0,
+      snapshot.text,
+      snapshot.progress,
       {
         title: trackTitle(playback.currentTrack),
         artist: trackArtist(playback.currentTrack),
         playing: playback.isPlaying,
+        progressSpan: snapshot.progressSpan,
         positionMs: playback.positionMs,
         durationMs: duration,
         playbackRate: audioRef.current?.playbackRate,
@@ -1289,7 +1289,7 @@ export function App({
     }
     await showDesktopLyricsWindow();
     setDesktopLyricsEnabled(true);
-  }, [currentDesktopLyricText, desktopLyricsEnabled]);
+  }, [currentDesktopLyricSnapshot, desktopLyricsEnabled]);
 
   const executeGlobalHotkeyAction = useCallback(
     (action: string) => {
@@ -1433,14 +1433,16 @@ export function App({
 
   useEffect(() => {
     if (!desktopLyricsEnabled) return;
+    const snapshot = currentDesktopLyricSnapshot();
     const payload = buildDesktopLyricsPayloadPatch(
       visualFx,
-      currentDesktopLyricText(),
-      (durationMs ?? 0) > 0 ? positionMs / (durationMs ?? 1) : 0,
+      snapshot.text,
+      snapshot.progress,
       {
         title: trackTitle(currentTrack),
         artist: trackArtist(currentTrack),
         playing: isPlaying,
+        progressSpan: snapshot.progressSpan,
         positionMs,
         durationMs,
         playbackRate: audioRef.current?.playbackRate,
@@ -1458,7 +1460,7 @@ export function App({
     }
     void updateDesktopLyricsPayload(payload);
   }, [
-    currentDesktopLyricText,
+    currentDesktopLyricSnapshot,
     desktopLyricsEnabled,
     durationMs,
     currentTrack,
