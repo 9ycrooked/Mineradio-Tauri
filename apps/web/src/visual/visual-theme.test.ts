@@ -20,3 +20,22 @@ test("applyVisualThemeToRoot mirrors baseline UI, Home, and visual tint CSS vari
   expect(root.style.getPropertyValue("--glass-border")).toBe("rgba(18,171,239,.30)");
   expect(root.style.getPropertyValue("--visual-tint")).toBe("#223344");
 });
+
+test("applyVisualThemeToRoot applies baseline custom background opacity classes and variables", () => {
+  document.body.className = "";
+  applyVisualThemeToRoot(document.documentElement, {
+    ...FX_DEFAULTS,
+    backgroundOpacity: 0.42,
+  });
+
+  expect(document.documentElement.style.getPropertyValue("--custom-bg-color")).toBe("#000000");
+  expect(document.body.classList.contains("custom-background-override")).toBe(true);
+  expect(document.body.classList.contains("custom-background-flat")).toBe(true);
+
+  applyVisualThemeToRoot(document.documentElement, {
+    ...FX_DEFAULTS,
+    backgroundOpacity: 1,
+  });
+  expect(document.body.classList.contains("custom-background-override")).toBe(false);
+  expect(document.body.classList.contains("custom-background-flat")).toBe(false);
+});

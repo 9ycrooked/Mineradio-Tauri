@@ -19,6 +19,7 @@ import { useLyricsStore } from "../stores/lyrics-store";
 import { usePlaybackStore } from "../stores/playback-store";
 import { useSearchStore } from "../stores/search-store";
 import { useShelfStore } from "../stores/shelf-store";
+import { useVisualStore } from "../stores/visual-store";
 import { CUSTOM_LYRIC_PREF_STORE_KEY, CUSTOM_LYRIC_STORE_KEY } from "../lyrics/custom-lyrics";
 import { SidecarClientError, type SidecarClient } from "../api/sidecar-client";
 import type { VisualEngineHostProps } from "../visual/VisualEngineHost";
@@ -195,6 +196,64 @@ test("App default sidecar client factory stays stable and does not storm health 
 		host.remove();
 		globalThis.fetch = previousFetch;
 		useSearchStore.getState().reset();
+	}
+});
+
+test("DIY desktop lyrics toggle drives the desktop lyrics window lifecycle", async () => {
+	await import("../../../../packages/visual-engine/src/runtime/happy-dom-preload");
+	const restoreAudio = installAppStubAudio();
+	const calls: string[] = [];
+	const runtimeConfig: RuntimeConfig = {
+		sidecarBaseUrl: "",
+		appDataDir: "",
+		appVersion: "0.0.0-test",
+		schemaVersion: "0.1.0",
+		updaterPublicKeyConfigured: false,
+	};
+	const host = document.createElement("div");
+	document.body.appendChild(host);
+	const root = createRoot(host);
+	const resetVisualStore = () => {
+		const fx = cloneFxState();
+		useVisualStore.setState({
+			fx,
+			preset: fx.preset,
+			intensity: fx.intensity,
+			custom: {},
+		});
+	};
+	try {
+		resetVisualStore();
+		flushSync(() => root.render(
+			<App
+				SplashComponent={() => null}
+				VisualComponent={() => <div id="visual-host" />}
+				initialRuntimeConfig={runtimeConfig}
+				desktopLyricsRuntime={{
+					showWindow: async () => { calls.push("show"); },
+					closeWindow: async () => { calls.push("close"); },
+					updatePayload: async (payload) => {
+						calls.push(`payload:${String((payload as { enabled?: unknown }).enabled)}`);
+					},
+				}}
+			/>,
+		));
+		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		(host.querySelector("#fx-fab") as HTMLButtonElement).click();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		(host.querySelector("#t-desktopLyrics") as HTMLButtonElement).click();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(calls).toEqual(["payload:true", "show"]);
+
+		(host.querySelector("#t-desktopLyrics") as HTMLButtonElement).click();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(calls).toEqual(["payload:true", "show", "close"]);
+	} finally {
+		root.unmount();
+		host.remove();
+		restoreAudio();
+		resetVisualStore();
 	}
 });
 

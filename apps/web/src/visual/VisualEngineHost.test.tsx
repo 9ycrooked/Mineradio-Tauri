@@ -30,6 +30,8 @@ test("VisualEngineHost server-renders a visual-host placeholder div without invo
 		}),
 	);
 	expect(html).toContain('id="visual-host"');
+	expect(html).toContain('id="custom-bg"');
+	expect(html).toContain('id="custom-bg-video"');
 	expect(html).toContain('id="album-bg"');
 	expect(html).not.toContain("canvas");
 });
@@ -62,6 +64,8 @@ test("visual host keeps the WebGL canvas hit-testable for baseline stage drag an
 
 test("album background CSS matches the Electron baseline cover glow layer", async () => {
 	const css = await fetch(new URL("../styles.css", import.meta.url)).then((res) => res.text());
+	expect(/#custom-bg\s*\{[\s\S]*position:\s*fixed;[\s\S]*z-index:\s*0;[\s\S]*background:\s*var\(--custom-bg-color,#000\);/.test(css)).toBe(true);
+	expect(/#custom-bg::before\s*\{[\s\S]*background-image:\s*var\(--custom-bg-image,none\);[\s\S]*opacity:\s*var\(--custom-bg-image-opacity,0\);/.test(css)).toBe(true);
 	expect(/#visual-host\s*\{[\s\S]*z-index:\s*1;[\s\S]*background:\s*transparent;/.test(css)).toBe(true);
 	expect(/#album-bg\s*\{[\s\S]*position:\s*fixed;[\s\S]*z-index:\s*0;[\s\S]*filter:\s*blur\(120px\) brightness\(0\.18\) saturate\(1\.5\);[\s\S]*transform:\s*scale\(1\.4\);[\s\S]*transition:\s*background-image 1\.5s ease, opacity 1\.5s ease;/.test(css)).toBe(true);
 	expect(/#visual-host canvas\s*\{[\s\S]*z-index:\s*1;/.test(css)).toBe(true);

@@ -751,8 +751,20 @@ export function resolveHomeVisualPreset(
 	currentPreset: number,
 	defaultPreset: number,
 	previousPreset: number | null,
-	opts: { playbackActive?: boolean; playbackPreset?: number | null } = {},
+	opts: {
+		playbackActive?: boolean;
+		playbackPreset?: number | null;
+		previewEnabled?: boolean;
+		committedPresetChanged?: boolean;
+	} = {},
 ): { preset: number; previousPreset: number | null; changed: boolean } {
+	if (homeActive && (opts.previewEnabled === false || opts.committedPresetChanged)) {
+		return {
+			preset: defaultPreset,
+			previousPreset: null,
+			changed: currentPreset !== defaultPreset,
+		};
+	}
 	if (homeActive) {
 		const nextPreviousPreset = previousPreset ?? currentPreset;
 		return {
@@ -957,6 +969,8 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 			});
 			let homeVisualPreviousPreset: number | null = null;
 			let homeVisualPreviewActive = false;
+			let homePresetPreviewEnabled = false;
+			let homePresetPreviewSourcePreset: number | null = null;
 			let syncedCoverUrlVersion = refs.coverUrlVersionRef?.current ?? 0;
 			const syncHomeVisualPixelRatio = () => {
 				const pixelRatio = renderer.renderer.getPixelRatio?.() ?? 1;
@@ -1165,6 +1179,26 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 				const homeActive = refs.homeActiveRef?.current === true;
 				const wasHomePreviewActive = homeVisualPreviewActive;
 				const enteringHomePreview = homeActive && !homeVisualPreviewActive;
+				const committedPreset = homeVisual.getFx().preset ?? refs.fxDefaults?.preset ?? 0;
+				if (enteringHomePreview) {
+					homePresetPreviewEnabled = true;
+					homePresetPreviewSourcePreset = committedPreset;
+				}
+				const committedPresetChanged =
+					homeActive &&
+					homePresetPreviewEnabled &&
+					homePresetPreviewSourcePreset !== null &&
+					committedPreset !== homePresetPreviewSourcePreset;
+				if (committedPresetChanged) {
+					homePresetPreviewEnabled = false;
+					homeVisualPreviousPreset = null;
+					homePresetPreviewSourcePreset = committedPreset;
+					cinema.setPresetCameraBaseline(committedPreset);
+				}
+				if (!homeActive) {
+					homePresetPreviewEnabled = false;
+					homePresetPreviewSourcePreset = null;
+				}
 				const resettingToLyricStage = shouldResetLyricStageCameraView({
 					wasHomeActive: wasHomePreviewActive,
 					homeActive,
@@ -1173,11 +1207,13 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 				const preset = resolveHomeVisualPreset(
 					homeActive,
 					homeVisual.getPreset(),
-					homeVisual.getFx().preset ?? refs.fxDefaults?.preset ?? 0,
+					committedPreset,
 					homeVisualPreviousPreset,
 					{
 						playbackActive: refs.isPlayingRef.current,
-						playbackPreset: homeVisual.getFx().preset ?? refs.fxDefaults?.preset ?? 0,
+						playbackPreset: committedPreset,
+						previewEnabled: homePresetPreviewEnabled,
+						committedPresetChanged,
 					},
 				);
 				if (preset.changed) {

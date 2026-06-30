@@ -301,6 +301,18 @@ test("resolveHomeVisualPreset keeps cached pre-home preset ahead of playback pre
 	expect(restored).toEqual({ preset: 4, previousPreset: null, changed: true });
 });
 
+test("resolveHomeVisualPreset stops forcing idle wallpaper after a committed DIY preset change", () => {
+	const manual = resolveHomeVisualPreset(true, 4, 4, 2, {
+		committedPresetChanged: true,
+	});
+	expect(manual).toEqual({ preset: 4, previousPreset: null, changed: false });
+
+	const held = resolveHomeVisualPreset(true, 4, 4, null, {
+		previewEnabled: false,
+	});
+	expect(held).toEqual({ preset: 4, previousPreset: null, changed: false });
+});
+
 test("resolveStageLyricLayoutOptions carries baseline camera lock and layout controls", () => {
 	const layout = resolveStageLyricLayoutOptions({
 		lyricCameraLock: true,

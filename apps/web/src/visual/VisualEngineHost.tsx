@@ -375,6 +375,9 @@ export function VisualEngineHost(props: VisualEngineHostProps): ReactElement {
 
 	return (
 		<>
+			<div id="custom-bg" aria-hidden="true">
+				<video id="custom-bg-video" muted loop playsInline preload="metadata" />
+			</div>
 			<div id="album-bg" className={directCoverUrl ? "visible" : undefined} style={albumBgStyle} aria-hidden="true" />
 			<div id="visual-host" className="visual-host" ref={hostRef} />
 		</>

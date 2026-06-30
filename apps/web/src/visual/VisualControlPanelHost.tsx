@@ -322,6 +322,7 @@ export interface VisualControlPanelHostProps {
   onNumberSettingChange?: (key: keyof FxState, value: number) => void;
   onBooleanSettingChange?: (key: keyof FxState, value: boolean) => void;
   onStringSettingChange?: (key: keyof FxState, value: string) => void;
+  onFxPatchChange?: (patch: Partial<FxState>) => void;
   onNotice?: (message: string) => void;
 }
 
@@ -562,8 +563,13 @@ export function VisualControlPanelHost(
   }, [props]);
   const setVisualTintCustom = useCallback(
     (color: string) => {
+      const visualTintColor = color.toLowerCase();
+      if (props.onFxPatchChange) {
+        props.onFxPatchChange({ visualTintMode: "custom", visualTintColor });
+        return;
+      }
       props.onStringSettingChange?.("visualTintMode", "custom");
-      props.onStringSettingChange?.("visualTintColor", color.toLowerCase());
+      props.onStringSettingChange?.("visualTintColor", visualTintColor);
     },
     [props],
   );
@@ -571,13 +577,25 @@ export function VisualControlPanelHost(
     props.onStringSettingChange?.("visualTintMode", "auto");
   }, [props]);
   const resetVisualTintColor = useCallback(() => {
+    if (props.onFxPatchChange) {
+      props.onFxPatchChange({
+        visualTintMode: "auto",
+        visualTintColor: FX_DEFAULTS.visualTintColor,
+      });
+      return;
+    }
     props.onStringSettingChange?.("visualTintMode", "auto");
     props.onStringSettingChange?.("visualTintColor", FX_DEFAULTS.visualTintColor);
   }, [props]);
   const setLyricColorCustom = useCallback(
     (color: string) => {
+      const lyricColor = color.toLowerCase();
+      if (props.onFxPatchChange) {
+        props.onFxPatchChange({ lyricColorMode: "custom", lyricColor });
+        return;
+      }
       props.onStringSettingChange?.("lyricColorMode", "custom");
-      props.onStringSettingChange?.("lyricColor", color.toLowerCase());
+      props.onStringSettingChange?.("lyricColor", lyricColor);
     },
     [props],
   );
@@ -586,8 +604,16 @@ export function VisualControlPanelHost(
   }, [props]);
   const setLyricHighlightCustom = useCallback(
     (color: string) => {
+      const lyricHighlightColor = color.toLowerCase();
+      if (props.onFxPatchChange) {
+        props.onFxPatchChange({
+          lyricHighlightMode: "custom",
+          lyricHighlightColor,
+        });
+        return;
+      }
       props.onStringSettingChange?.("lyricHighlightMode", "custom");
-      props.onStringSettingChange?.("lyricHighlightColor", color.toLowerCase());
+      props.onStringSettingChange?.("lyricHighlightColor", lyricHighlightColor);
     },
     [props],
   );

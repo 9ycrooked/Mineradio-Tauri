@@ -869,6 +869,19 @@ export type AppProps = {
   VisualComponent?: typeof VisualEngineHost;
   createSidecarClient?: (cfg: RuntimeConfig) => SidecarClient;
   initialRuntimeConfig?: RuntimeConfig | null;
+  desktopLyricsRuntime?: DesktopLyricsRuntime;
+};
+
+export type DesktopLyricsRuntime = {
+  showWindow: () => Promise<void>;
+  closeWindow: () => Promise<void>;
+  updatePayload: (payload: JsonValue) => Promise<void>;
+};
+
+const defaultDesktopLyricsRuntime: DesktopLyricsRuntime = {
+  showWindow: showDesktopLyricsWindow,
+  closeWindow: closeDesktopLyricsWindow,
+  updatePayload: updateDesktopLyricsPayload,
 };
 
 function createDefaultSidecarClient(cfg: RuntimeConfig): SidecarClient {
@@ -880,6 +893,7 @@ export function App({
   VisualComponent = VisualEngineHost,
   createSidecarClient = createDefaultSidecarClient,
   initialRuntimeConfig = null,
+  desktopLyricsRuntime = defaultDesktopLyricsRuntime,
 }: AppProps = {}): ReactElement {
   const [sidecarClient, setSidecarClient] = useState<SidecarClient | null>(
     null,
@@ -980,6 +994,7 @@ export function App({
   const setVisualNumberSetting = useVisualStore((s) => s.setNumberSetting);
   const setVisualBooleanSetting = useVisualStore((s) => s.setBooleanSetting);
   const setVisualStringSetting = useVisualStore((s) => s.setStringSetting);
+  const setVisualFxPatch = useVisualStore((s) => s.setFxPatch);
   const consoleVisible = useUiStore((s) => s.consoleVisible);
   const setConsole = useUiStore((s) => s.setConsole);
   const miniQueueOpen = useUiStore((s) => s.miniQueueOpen);
@@ -2452,6 +2467,10 @@ export function App({
     [setShelfMergeCollections, showToast],
   );
 
+  const setDesktopLyricsWindowEnabledRef = useRef<
+    (enabled: boolean) => Promise<void> | void
+  >(() => {});
+
   const updateVisualPreset = useCallback(
     (preset: number) => {
       setVisualPreset(preset);
@@ -2460,12 +2479,29 @@ export function App({
     [setVisualPreset],
   );
 
+  const updateVisualFxPatch = useCallback(
+    (patch: Partial<FxState>) => {
+      setVisualFxPatch(patch);
+      saveVisualFxToStorage();
+    },
+    [setVisualFxPatch],
+  );
+
   const updateVisualNumberSetting = useCallback(
     (key: keyof typeof visualFx, value: number) => {
+      if (key === "backgroundOpacity") {
+        setVisualFxPatch({
+          backgroundOpacity: value,
+          backgroundColorMode: "custom",
+          backgroundColorCustom: true,
+        });
+        saveVisualFxToStorage();
+        return;
+      }
       setVisualNumberSetting(key, value);
       saveVisualFxToStorage();
     },
-    [setVisualNumberSetting],
+    [setVisualFxPatch, setVisualNumberSetting],
   );
 
   const updateVisualBooleanSetting = useCallback(
@@ -2476,6 +2512,9 @@ export function App({
       saveVisualFxToStorage();
       if (key === "shelfShowPodcasts" || key === "shelfMergeCollections")
         saveShelfSettingsToStorage();
+      if (key === "desktopLyrics") {
+        void setDesktopLyricsWindowEnabledRef.current(value);
+      }
       if (key === "aiDepth") {
         showToast(
           value
@@ -2565,9 +2604,9 @@ export function App({
     return buildDesktopLyricSnapshot(payload, playback.positionMs, fallback);
   }, []);
 
-  const toggleDesktopLyrics = useCallback(async () => {
-    if (desktopLyricsEnabled) {
-      await closeDesktopLyricsWindow();
+  const setDesktopLyricsWindowEnabled = useCallback(async (enabled: boolean) => {
+    if (!enabled) {
+      await desktopLyricsRuntime.closeWindow();
       setDesktopLyricsEnabled(false);
       return;
     }
@@ -2608,11 +2647,16 @@ export function App({
         true,
       )
     ) {
-      await updateDesktopLyricsPayload(payload);
+      await desktopLyricsRuntime.updatePayload(payload);
     }
-    await showDesktopLyricsWindow();
+    await desktopLyricsRuntime.showWindow();
     setDesktopLyricsEnabled(true);
-  }, [currentBeatMapState, currentDesktopLyricSnapshot, desktopLyricsEnabled]);
+  }, [currentBeatMapState, currentDesktopLyricSnapshot, desktopLyricsRuntime]);
+  setDesktopLyricsWindowEnabledRef.current = setDesktopLyricsWindowEnabled;
+
+  const toggleDesktopLyrics = useCallback(async () => {
+    await setDesktopLyricsWindowEnabled(!desktopLyricsEnabled);
+  }, [desktopLyricsEnabled, setDesktopLyricsWindowEnabled]);
 
   const executeGlobalHotkeyAction = useCallback(
     (action: string) => {
@@ -2837,7 +2881,7 @@ export function App({
     ) {
       return;
     }
-    void updateDesktopLyricsPayload(payload);
+    void desktopLyricsRuntime.updatePayload(payload);
   }, [
     currentDesktopLyricSnapshot,
     desktopLyricsEnabled,
@@ -2848,6 +2892,7 @@ export function App({
     positionMs,
     currentBeatMapState,
     visualFx,
+    desktopLyricsRuntime,
   ]);
 
   useEffect(() => {
@@ -3350,6 +3395,7 @@ export function App({
         onNumberSettingChange={updateVisualNumberSetting}
         onBooleanSettingChange={updateVisualBooleanSetting}
         onStringSettingChange={updateVisualStringSetting}
+        onFxPatchChange={updateVisualFxPatch}
         onNotice={showNotice}
       />
       <EmptyHomeHost

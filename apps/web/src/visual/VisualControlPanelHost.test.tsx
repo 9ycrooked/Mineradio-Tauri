@@ -266,6 +266,43 @@ test("VisualControlPanelHost emits baseline UI accent, visual tint, and Home fil
   container.remove();
 });
 
+test("VisualControlPanelHost batches visual tint color drag into one fx patch when available", async () => {
+  await import("../../../../packages/visual-engine/src/runtime/happy-dom-preload");
+  const patches: string[] = [];
+  const stringCalls: string[] = [];
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  root.render(
+    React.createElement(VisualControlPanelHost, {
+      settings: {
+        visualTintMode: "auto",
+        visualTintColor: "#9db8cf",
+      },
+      onFxPatchChange: (patch) => patches.push(JSON.stringify(patch)),
+      onStringSettingChange: (key, value) => stringCalls.push(`${key}:${value}`),
+    }),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const valueSetter = Object.getOwnPropertyDescriptor(
+    window.HTMLInputElement.prototype,
+    "value",
+  )?.set;
+  const visualTint = container.querySelector(
+    "#visual-tint-picker",
+  ) as HTMLInputElement;
+  valueSetter?.call(visualTint, "#223344");
+  visualTint.dispatchEvent(new window.Event("input", { bubbles: true }));
+
+  expect(patches).toEqual([
+    JSON.stringify({ visualTintMode: "custom", visualTintColor: "#223344" }),
+  ]);
+  expect(stringCalls).toEqual([]);
+  root.unmount();
+  container.remove();
+});
+
 test("VisualControlPanelHost emits baseline stage lyric color controls", async () => {
   await import("../../../../packages/visual-engine/src/runtime/happy-dom-preload");
   const calls: string[] = [];
