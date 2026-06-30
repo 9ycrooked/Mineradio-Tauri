@@ -2233,6 +2233,13 @@ html.control-glass-svg-ok #playlist-panel {
   -webkit-backdrop-filter: blur(40px) saturate(1.4) !important;
 }
 
+.home-card[data-home-tone],
+.home-tile[data-home-tone] {
+  --tone-a: var(--home-accent);
+  --tone-b: color-mix(in srgb, var(--home-accent) 58%, #2442ff);
+  --tone-c: color-mix(in srgb, var(--home-accent) 42%, #f8f4ee);
+}
+
 .home-hero,
 .home-card,
 .home-tile,
