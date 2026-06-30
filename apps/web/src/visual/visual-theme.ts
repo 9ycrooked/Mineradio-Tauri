@@ -1,14 +1,19 @@
 import type { FxState } from "@mineradio/visual-engine";
 
-export function applyVisualThemeToRoot(root: HTMLElement, fx: Pick<FxState, "uiAccentColor" | "visualTintColor">): void {
+export function applyVisualThemeToRoot(
+  root: HTMLElement,
+  fx: Pick<FxState, "uiAccentColor" | "visualTintColor" | "homeAccentColor">,
+): void {
   const accent = normalizeHexColor(fx.uiAccentColor, "#ffffff");
   const tint = normalizeHexColor(fx.visualTintColor, "#9db8cf");
+  const homeAccent = normalizeHexColor(fx.homeAccentColor, "#ffffff");
   const rgb = hexToRgb(accent);
+  const homeRgb = hexToRgb(homeAccent);
   root.style.setProperty("--fc-accent", accent);
   root.style.setProperty("--fc-accent-hov", accent);
   root.style.setProperty("--fc-accent-rgb", `${rgb.r},${rgb.g},${rgb.b}`);
-  root.style.setProperty("--home-accent", accent);
-  root.style.setProperty("--home-accent-rgb", `${rgb.r},${rgb.g},${rgb.b}`);
+  root.style.setProperty("--home-accent", homeAccent);
+  root.style.setProperty("--home-accent-rgb", `${homeRgb.r},${homeRgb.g},${homeRgb.b}`);
   root.style.setProperty("--glass-border", `rgba(${rgb.r},${rgb.g},${rgb.b},.30)`);
   root.style.setProperty(
     "--glass-shadow-focus",

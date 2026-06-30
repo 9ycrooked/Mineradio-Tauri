@@ -540,6 +540,12 @@ export function VisualControlPanelHost(
     },
     [props],
   );
+  const setHomeAccentColor = useCallback(
+    (color: string) => {
+      props.onStringSettingChange?.("homeAccentColor", color.toLowerCase());
+    },
+    [props],
+  );
   const toggleAutoHide = useCallback(() => {
     const next = !autoHide;
     saveFxFabAutoHidePreference(next);
@@ -550,6 +556,9 @@ export function VisualControlPanelHost(
   }, [autoHide, props]);
   const resetUiAccentColor = useCallback(() => {
     props.onStringSettingChange?.("uiAccentColor", FX_DEFAULTS.uiAccentColor);
+  }, [props]);
+  const resetHomeAccentColor = useCallback(() => {
+    props.onStringSettingChange?.("homeAccentColor", FX_DEFAULTS.homeAccentColor);
   }, [props]);
   const setVisualTintCustom = useCallback(
     (color: string) => {
@@ -595,6 +604,7 @@ export function VisualControlPanelHost(
     [props],
   );
   const uiAccentColor = hexSettingValue(props, "uiAccentColor");
+  const homeAccentColor = hexSettingValue(props, "homeAccentColor");
   const visualTintColor = hexSettingValue(props, "visualTintColor");
   const visualTintAuto = stringValue(props, "visualTintMode") !== "custom";
   const lyricColor = hexSettingValue(props, "lyricColor");
@@ -719,6 +729,25 @@ export function VisualControlPanelHost(
             封面
           </button>
           <button id="visual-tint-default-btn" className="fx-mini-btn ghost" type="button" onClick={resetVisualTintColor}>
+            默认
+          </button>
+        </div>
+        <div className="lyric-color-row">
+          <input
+            id="home-accent-picker"
+            className="lyric-color-picker"
+            type="color"
+            value={homeAccentColor}
+            onInput={(event) => setHomeAccentColor(event.currentTarget.value)}
+            title="Home 填充色"
+          />
+          <div className="fx-color-row-label">
+            Home 填充
+            <small id="home-accent-value">
+              {homeAccentColor.toUpperCase()}
+            </small>
+          </div>
+          <button id="home-accent-default-btn" className="fx-mini-btn ghost" type="button" onClick={resetHomeAccentColor}>
             默认
           </button>
         </div>

@@ -2457,6 +2457,80 @@ html.control-glass-svg-ok .search-history-chip {
   --panel-button-bg: linear-gradient(145deg, rgba(255, 255, 255, .075), rgba(var(--home-accent-rgb), .060) 46%, rgba(0, 0, 0, .14));
 }
 
+.home-card[data-home-tone],
+.home-tile[data-home-tone] {
+  --tone-a: var(--home-accent);
+  --tone-b: color-mix(in srgb, var(--home-accent) 58%, #2442ff);
+  --tone-c: color-mix(in srgb, var(--home-accent) 42%, #f8f4ee);
+}
+
+.home-hero {
+  border-color: color-mix(in srgb, var(--home-accent) 34%, rgba(255, 255, 255, .085));
+  background: linear-gradient(145deg, color-mix(in srgb, var(--home-accent) 18%, rgba(33, 29, 34, .64)), rgba(9, 10, 14, .76) 48%, color-mix(in srgb, var(--home-accent) 10%, rgba(17, 20, 25, .70)));
+}
+
+.home-hero::before {
+  background:
+    linear-gradient(118deg, color-mix(in srgb, var(--home-accent) 18%, rgba(255, 255, 255, .060)), transparent 24%, color-mix(in srgb, var(--home-accent) 13%, rgba(255, 83, 103, .070)) 54%, color-mix(in srgb, var(--home-accent) 15%, rgba(122, 215, 194, .055)) 82%, transparent 100%),
+    linear-gradient(90deg, rgba(255, 255, 255, .032) 0 1px, transparent 1px 48px),
+    linear-gradient(0deg, rgba(255, 255, 255, .024) 0 1px, transparent 1px 44px);
+}
+
+.home-card,
+.home-tile,
+.home-mosaic-cell {
+  border-color: color-mix(in srgb, var(--home-accent) 22%, rgba(255, 255, 255, .080));
+  box-shadow: 0 20px 64px rgba(0, 0, 0, .28), 0 0 26px color-mix(in srgb, var(--home-accent) 8%, transparent), inset 0 1px 0 rgba(255, 255, 255, .060);
+}
+
+.home-card {
+  background: linear-gradient(142deg, color-mix(in srgb, var(--home-accent) 13%, rgba(18, 21, 26, .66)), rgba(8, 9, 13, .76));
+}
+
+.home-card::before {
+  background:
+    linear-gradient(118deg, color-mix(in srgb, var(--home-accent) 24%, transparent), transparent 38%, color-mix(in srgb, var(--home-accent) 14%, transparent) 74%, transparent),
+    linear-gradient(90deg, rgba(255, 255, 255, .035) 0 1px, transparent 1px 38px);
+}
+
+.home-card:hover,
+.home-tile:hover {
+  border-color: color-mix(in srgb, var(--home-accent) 44%, rgba(255, 255, 255, .18));
+  box-shadow: 0 26px 78px rgba(0, 0, 0, .34), 0 0 34px color-mix(in srgb, var(--home-accent) 16%, transparent), inset 0 1px 0 rgba(255, 255, 255, .085);
+}
+
+.home-tile {
+  background: linear-gradient(145deg, color-mix(in srgb, var(--home-accent) 12%, rgba(255, 255, 255, .060)), rgba(255, 255, 255, .025));
+}
+
+.home-sleeve {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--home-accent) 72%, rgba(255, 255, 255, .10)), color-mix(in srgb, var(--home-accent) 46%, #2442ff) 48%, rgba(248, 244, 238, .30));
+}
+
+.home-disc {
+  background:
+    repeating-radial-gradient(circle, rgba(255, 255, 255, .10) 0 1px, transparent 1px 10px),
+    conic-gradient(from 210deg, var(--home-accent), color-mix(in srgb, var(--home-accent) 55%, #2442ff), #f8f4ee, color-mix(in srgb, var(--home-accent) 72%, #7ad7c2), var(--home-accent));
+}
+
+.home-mosaic-cell:not(.has-cover)::before {
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--home-accent) 68%, transparent), color-mix(in srgb, var(--home-accent) 36%, #2442ff) 46%, rgba(10, 10, 14, .20)),
+    repeating-linear-gradient(110deg, rgba(255, 255, 255, .16) 0 2px, transparent 2px 18px);
+}
+
+.home-mosaic-cell:nth-child(2):not(.has-cover)::before {
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--home-accent) 72%, #7ad7c2), color-mix(in srgb, var(--home-accent) 42%, #9db8cf) 48%, rgba(10, 10, 14, .24)),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, .16) 0 2px, transparent 2px 16px);
+}
+
+.home-mosaic-cell:nth-child(3):not(.has-cover)::before {
+  background:
+    linear-gradient(135deg, rgba(248, 244, 238, .38), color-mix(in srgb, var(--home-accent) 46%, transparent) 58%, rgba(10, 10, 14, .24)),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, .15) 0 2px, transparent 2px 15px);
+}
+
 #search-box,
 #search-results,
 .search-mode-tabs,

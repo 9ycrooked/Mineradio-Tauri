@@ -208,6 +208,9 @@ test("desktop shell CSS keeps the rounded shell transparent while the visual hos
 test("Home shell CSS includes the baseline stable panel glass final overrides", async () => {
 	const css = await fetch(new URL("../styles.css", import.meta.url)).then((response) => response.text());
 	expect(css).toContain("--home-accent-rgb: 0, 245, 212;");
+	expect(css).toContain(".home-card[data-home-tone],\n.home-tile[data-home-tone]");
+	expect(css).toContain("--tone-a: var(--home-accent);");
+	expect(css).toContain("conic-gradient(from 210deg, var(--home-accent)");
 	expect(css).toContain("--panel-glass-filter: blur(22px) saturate(1.22) brightness(1.04);");
 	expect(css).toContain("background: var(--panel-glass-bg) !important;");
 	expect(css).toContain("html.control-glass-svg-ok .home-hero");

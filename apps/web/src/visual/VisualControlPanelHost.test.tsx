@@ -27,6 +27,7 @@ test("VisualControlPanelHost renders baseline DIY control sections", () => {
   );
   expect(html).toContain('id="ui-accent-picker"');
   expect(html).toContain('id="visual-tint-picker"');
+  expect(html).toContain('id="home-accent-picker"');
   expect(html).toContain('id="fx-intensity"');
   expect(html).toContain('id="fx-depth"');
   expect(html).toContain('id="fx-coverres"');
@@ -205,7 +206,7 @@ test("VisualControlPanelHost mirrors baseline fx fab auto-hide preference and pe
   document.body.className = "";
 });
 
-test("VisualControlPanelHost emits baseline UI accent and visual tint color controls", async () => {
+test("VisualControlPanelHost emits baseline UI accent, visual tint, and Home fill color controls", async () => {
   await import("../../../../packages/visual-engine/src/runtime/happy-dom-preload");
   const calls: string[] = [];
   const container = document.createElement("div");
@@ -217,6 +218,7 @@ test("VisualControlPanelHost emits baseline UI accent and visual tint color cont
         uiAccentColor: "#ffffff",
         visualTintMode: "custom",
         visualTintColor: "#445566",
+        homeAccentColor: "#ffffff",
       },
       onStringSettingChange: (key, value) => calls.push(`${key}:${value}`),
     }),
@@ -242,6 +244,13 @@ test("VisualControlPanelHost emits baseline UI accent and visual tint color cont
   (container.querySelector("#visual-tint-auto-btn") as HTMLButtonElement).click();
   (container.querySelector("#visual-tint-default-btn") as HTMLButtonElement).click();
 
+  const homeAccent = container.querySelector(
+    "#home-accent-picker",
+  ) as HTMLInputElement;
+  valueSetter?.call(homeAccent, "#fedcba");
+  homeAccent.dispatchEvent(new window.Event("input", { bubbles: true }));
+  (container.querySelector("#home-accent-default-btn") as HTMLButtonElement).click();
+
   expect(calls).toEqual([
     "uiAccentColor:#12abef",
     "uiAccentColor:#ffffff",
@@ -250,6 +259,8 @@ test("VisualControlPanelHost emits baseline UI accent and visual tint color cont
     "visualTintMode:auto",
     "visualTintMode:auto",
     "visualTintColor:#9db8cf",
+    "homeAccentColor:#fedcba",
+    "homeAccentColor:#ffffff",
   ]);
   root.unmount();
   container.remove();
