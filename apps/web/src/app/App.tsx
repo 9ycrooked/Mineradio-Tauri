@@ -307,7 +307,7 @@ function desktopOverlayColorValue(value: unknown, fallback: string): string {
 }
 
 function trackTitle(track: Track | null | undefined): string {
-  return track?.title || "Mineradio";
+  return track?.title || "MineRadio-Tauri";
 }
 
 function trackArtist(track: Track | null | undefined): string {
@@ -575,7 +575,7 @@ export function buildDesktopLyricsPayloadPatch(
     text,
     progress: clampNumber(progress, 0, 1),
     progressSpan: clampNumber(Number(context.progressSpan ?? 4.8), 0, 60),
-    title: context.title || "Mineradio",
+    title: context.title || "MineRadio-Tauri",
     artist: context.artist || "",
     playing: context.playing === true,
     size,

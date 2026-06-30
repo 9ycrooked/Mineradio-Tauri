@@ -283,7 +283,7 @@ test("Home shell CSS includes the baseline stable panel glass final overrides", 
 	expect(css).toContain("background: rgba(0, 0, 0, .72) !important;");
 });
 
-test("player console CSS hides migration-only controls from the baseline main bar", async () => {
+test("player console CSS hides advanced controls from the main bar", async () => {
 	const css = await fetch(new URL("../styles.css", import.meta.url)).then((response) => response.text());
 	expect(css).toContain("body.simple-mode #bottom-bar");
 	expect(css).toContain("body.simple-mode #search-mode-tabs");
@@ -1912,7 +1912,7 @@ test("App routes the logged-out Home library card to the baseline visual guide i
 		expect(host.querySelector("#login-modal")).toBeNull();
 		expect(host.querySelector("#visual-guide")?.classList.contains("show")).toBe(true);
 		expect(document.body.classList.contains("visual-guide-active")).toBe(true);
-		expect(host.querySelector("#visual-guide-title")?.textContent).toBe("Mineradio 是用来听歌的视觉播放器");
+		expect(host.querySelector("#visual-guide-title")?.textContent).toBe("MineRadio-Tauri 是用来听歌的视觉播放器");
 		expect(host.querySelector("#visual-guide-progress")?.textContent).toBe("1 / 7");
 
 		(host.querySelector("#visual-guide-next") as HTMLButtonElement).click();

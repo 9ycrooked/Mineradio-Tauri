@@ -3825,7 +3825,7 @@ html.control-glass-svg-ok .pl-inline-detail {
   text-align: right;
 }
 
-/* Baseline player console visible surface: keep advanced migration controls out of the main bar. */
+/* Player console visible surface: keep advanced controls out of the main bar. */
 #bottom-bar,
 #bottom-bar.stage-mode,
 body.simple-mode #bottom-bar {

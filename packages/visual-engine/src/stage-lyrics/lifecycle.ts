@@ -965,7 +965,7 @@ export function createStageLyricsLifecycle(opts: StageLyricsLifecycleOpts): Stag
 		}
 		// Baseline `buildLyricMesh` is synchronous, so the old mesh is swapped
 		// to outgoing and the new mesh is attached in the same frame. The
-		// migration uses an async three factory, so we keep the previous lyric
+		// current renderer uses an async three factory, so we keep the previous lyric
 		// visible until the new group is ready, then swap atomically. This
 		// avoids a 1-2 frame gap where `state.current` would be null and the
 		// stage lyric would flicker out and back in (reported as lyric jitter).

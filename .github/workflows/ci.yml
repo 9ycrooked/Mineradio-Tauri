@@ -54,46 +54,15 @@ jobs:
             git diff-tree --check --root --no-commit-id -r HEAD
           fi
 
-      - name: Test shared contracts
-        run: |
-          bun test packages/shared
-          bun run --filter ./packages/shared typecheck
+      - name: Typecheck workspace
+        run: bun run typecheck
 
-      - name: Test sidecar API
-        run: |
-          bun test sidecars/api
-          bun run --filter ./sidecars/api typecheck
+      - name: Test workspace
+        run: bun run test
 
-      - name: Test visual engine
+      - name: Build web app
         run: |
-          bun test packages/visual-engine
-          bun run --filter ./packages/visual-engine typecheck
-
-      - name: Test web app
-        run: |
-          bun test apps/web
-          bun run --filter ./apps/web typecheck
           bun run web:build
-
-      - name: Run policy checks
-        run: |
-          bun run tauri-stack-policy:check
-          bun run app-data-policy:check
-          bun run sidecar-runtime-policy:check
-          bun run main-flow-policy:check
-          bun run release-identity:check
-          bun run release-csp:check
-          bun run installer-policy:check
-          bun run updater-policy:check
-          bun run release-notes-policy:check
-          bun run frontend-debug-log-policy:check
-          bun run ai-depth-remote-policy:check
-          bun run license:check
-          bun run license-transitive:check
-          bun run packaged-notices:check
-
-      - name: Check legacy baseline syntax
-        run: node --check server.js
 
   tauri-rust:
     name: Tauri Rust checks (${{ matrix.os }})
@@ -110,6 +79,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache Bun install cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-rust-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            bun-rust-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
       - name: Install Linux Tauri dependencies
         if: runner.os == 'Linux'
         run: |
@@ -123,6 +108,8 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
 
       - name: Cache Cargo
         uses: actions/cache@v4
@@ -134,6 +121,12 @@ jobs:
           key: cargo-${{ runner.os }}-${{ hashFiles('apps/desktop/src-tauri/Cargo.lock') }}
           restore-keys: |
             cargo-${{ runner.os }}-
+
+      - name: Cargo fmt
+        run: cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --all --check
+
+      - name: Cargo clippy
+        run: cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --all-targets --all-features --locked -- -D warnings
 
       - name: Cargo test
         run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked

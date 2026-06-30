@@ -40,9 +40,9 @@ fn ensure_sidecar_binary_for_tauri() {
         .env("TAURI_TARGET_TRIPLE", target_triple)
         .current_dir(desktop_dir)
         .status()
-        .expect("failed to start bun to build Mineradio sidecar binary");
+        .expect("failed to start bun to build MineRadio-Tauri sidecar binary");
     if !status.success() {
-        panic!("failed to build Mineradio sidecar binary");
+        panic!("failed to build MineRadio-Tauri sidecar binary");
     }
 }
 

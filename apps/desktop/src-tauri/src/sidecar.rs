@@ -751,9 +751,9 @@ mod tests {
     fn find_packaged_sidecar_binary_for_exe_finds_tauri_external_bin_sibling() {
         let root = std::env::temp_dir().join(format!("mineradio-sidecar-test-{}", now_ms()));
         let exe_path = root.join(if cfg!(target_os = "windows") {
-            "Mineradio Tauri Rewrite.exe"
+            "MineRadio-Tauri.exe"
         } else {
-            "Mineradio Tauri Rewrite"
+            "MineRadio-Tauri"
         });
         std::fs::create_dir_all(&root).expect("create temp dir");
         std::fs::write(&exe_path, b"app").expect("write fake exe");
@@ -1046,19 +1046,17 @@ mod tests {
         let port = listener.local_addr().unwrap().port();
         let body = br#"{"ok":true,"appVersion":"x","apiVersion":"0.1.0","schemaVersion":"0.1.0","providers":[]}"#.to_vec();
         std::thread::spawn(move || {
-            for stream in listener.incoming() {
-                if let Ok(mut stream) = stream {
-                    let mut req = [0u8; 4096];
-                    let _ = std::io::Read::read(&mut stream, &mut req);
-                    let resp = format!(
-                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-                        body.len()
-                    );
-                    let _ = stream.write_all(resp.as_bytes());
-                    let _ = stream.write_all(&body);
-                    let _ = stream.flush();
-                    let _ = stream.shutdown(std::net::Shutdown::Both);
-                }
+            for mut stream in listener.incoming().flatten() {
+                let mut req = [0u8; 4096];
+                let _ = std::io::Read::read(&mut stream, &mut req);
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
+                let _ = stream.write_all(resp.as_bytes());
+                let _ = stream.write_all(&body);
+                let _ = stream.flush();
+                let _ = stream.shutdown(std::net::Shutdown::Both);
             }
         });
         let base_url = format!("http://127.0.0.1:{}", port);
