@@ -278,6 +278,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::get_runtime_config,
             commands::get_sidecar_status,
+            commands::get_database_status,
             commands::configure_global_hotkeys,
             commands::get_updater_status,
             commands::check_for_update,

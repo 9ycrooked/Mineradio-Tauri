@@ -4,7 +4,7 @@
 //! the frontend sends data or receives parsed JSON, while paths come only from
 //! the native open/save dialog result.
 
-use crate::{sidecar, updater, AppState, DesktopLyricsPollerChild, DesktopLyricsRuntimeState};
+use crate::{db, sidecar, updater, AppState, DesktopLyricsPollerChild, DesktopLyricsRuntimeState};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -59,6 +59,17 @@ pub mod labels {
     pub const DESKTOP_LYRICS: &str = "desktop-lyrics";
     pub const LOGIN_NETEASE: &str = "login-netease";
     pub const LOGIN_QQ: &str = "login-qq";
+}
+
+/// 返回 SQLite 本地存储的诊断信息。
+///
+/// 薄壳:把 AppState 里的 DbRuntimeState 取出来,调 db::build_database_status。
+#[tauri::command]
+pub fn get_database_status(
+    state: tauri::State<'_, AppState>,
+) -> Result<db::DatabaseStatus, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db::build_database_status(&db.conn, &db.path).map_err(|e| e.to_string())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

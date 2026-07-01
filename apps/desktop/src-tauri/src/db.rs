@@ -187,6 +187,29 @@ pub fn initialize(app_data_dir: &Path) -> rusqlite::Result<DbRuntimeState> {
     Ok(DbRuntimeState { conn, path })
 }
 
+/// 数据库诊断快照,供 Tauri command 返回给前端。
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DatabaseStatus {
+    pub path: String,
+    pub migration_version: i64,
+    pub startup_count: i64,
+}
+
+/// 读取数据库的诊断信息。
+///
+/// 是 `get_database_status` command 的纯函数核心,方便单测。
+pub fn build_database_status(
+    conn: &Connection,
+    path: &Path,
+) -> rusqlite::Result<DatabaseStatus> {
+    Ok(DatabaseStatus {
+        path: path.to_string_lossy().to_string(),
+        migration_version: current_migration_version(conn)?,
+        startup_count: get_startup_count(conn)?,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -345,5 +368,18 @@ mod tests {
 
         let count = get_startup_count(&state.conn).expect("read count");
         assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn build_database_status_reports_path_version_and_count() {
+        let conn = fresh_db();
+        run_migrations(&conn).unwrap();
+        let path = std::env::temp_dir().join("mineradio-test-status.db");
+
+        let status = build_database_status(&conn, &path).expect("build status");
+
+        assert_eq!(status.path, path.to_string_lossy().to_string());
+        assert!(status.migration_version >= 1);
+        assert_eq!(status.startup_count, 0);
     }
 }
