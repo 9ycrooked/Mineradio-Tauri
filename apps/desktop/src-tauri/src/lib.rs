@@ -251,8 +251,17 @@ pub fn run() {
     let sidecar_log_path = sidecar::sidecar_log_path(&log_dir);
 
     // SQLite 本地存储初始化
-    let db_state = db::initialize(&app_data_dir)
-        .expect("failed to initialize SQLite local storage");
+    let db_state = match db::initialize(&app_data_dir) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!(
+                "db::initialize failed at {}: {:?}",
+                app_data_dir.display(),
+                e
+            );
+            panic!("failed to initialize SQLite local storage");
+        }
+    };
 
     let state = AppState::new(
         base_url.clone(),

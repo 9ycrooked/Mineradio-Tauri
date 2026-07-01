@@ -6,15 +6,15 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 /// 解析数据库路径
-pub fn resolve_db_path(app_data_dir: &Path) -> PathBuf {
+fn resolve_db_path(app_data_dir: &Path) -> PathBuf {
     app_data_dir.join("mineradio.db")
 }
 
-pub fn open_connection(db_path: &Path) -> rusqlite::Result<Connection> {
+fn open_connection(db_path: &Path) -> rusqlite::Result<Connection> {
     Connection::open(db_path)
 }
 
-pub fn run_migrations(conn: &Connection) -> rusqlite::Result<()> {
+fn run_migrations(conn: &Connection) -> rusqlite::Result<()> {
     // 确保 _migrations 表本身存在
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS _migrations (
@@ -107,6 +107,11 @@ fn set_kv(conn: &Connection, key: &str, value: &str) -> rusqlite::Result<()> {
     Ok(())
 }
 
+/// 记录一次收听历史到 listen_history 表。
+///
+/// 当前未被任何 Tauri command 引用,保留 pub 是为后续"听歌统计上报"
+/// 留出入口,本次 issue 不接入前端。`#[allow]` 抑制 dead_code 警告。
+#[allow(dead_code)]
 pub fn add_listen_history(
     conn: &Connection,
     song_key: &str,
@@ -134,7 +139,7 @@ pub fn add_listen_history(
     Ok(())
 }
 
-pub fn current_migration_version(conn: &Connection) -> rusqlite::Result<i64> {
+fn current_migration_version(conn: &Connection) -> rusqlite::Result<i64> {
     conn.query_row(
         "SELECT COALESCE(MAX(version), 0) FROM _migrations",
         [],
@@ -151,7 +156,7 @@ fn get_startup_count(conn: &Connection) -> rusqlite::Result<i64> {
     }
 }
 
-pub fn increment_startup_count(conn: &Connection) -> rusqlite::Result<i64> {
+fn increment_startup_count(conn: &Connection) -> rusqlite::Result<i64> {
     let current_count = get_startup_count(conn)?;
     let new_count = current_count + 1;
     set_kv(conn, "startup_count", &new_count.to_string())?;
@@ -191,8 +196,11 @@ pub fn initialize(app_data_dir: &Path) -> rusqlite::Result<DbRuntimeState> {
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DatabaseStatus {
+    /// 数据库文件的绝对路径,前端可用于"数据存放在哪"展示。
     pub path: String,
+    /// 来自 _migrations 表的 MAX(version);0 表示从未跑过迁移。
     pub migration_version: i64,
+    /// 自增的启动计数器,只用于诊断,不应作为业务判断依据。
     pub startup_count: i64,
 }
 
