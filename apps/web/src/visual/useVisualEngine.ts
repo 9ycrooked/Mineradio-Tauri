@@ -160,6 +160,72 @@ function mergeFxState(target: FxState, source: Partial<FxState> | undefined): Fx
 	return target;
 }
 
+export interface RuntimeVisualPerformancePolicy {
+	adaptiveFps: number;
+	pixelRatio: number;
+	bloom: boolean;
+	aiDepth: boolean;
+	backCover: boolean;
+}
+
+type RuntimeVisualPerformanceFx = Pick<FxState, "performanceBackground" | "performanceQuality" | "bloom" | "aiDepth" | "backCover">;
+
+export function resolveRuntimeVisualPerformancePolicy(input: {
+	fx?: Partial<RuntimeVisualPerformanceFx> | null;
+	devicePixelRatio?: number;
+	documentHidden?: boolean;
+	windowFocused?: boolean;
+	prefersReducedMotion?: boolean;
+}): RuntimeVisualPerformancePolicy {
+	const fx = input.fx ?? {};
+	const quality = typeof fx.performanceQuality === "string" ? fx.performanceQuality : "high";
+	const background = typeof fx.performanceBackground === "string" ? fx.performanceBackground : "auto";
+	const devicePixelRatio = Math.max(0.75, Number(input.devicePixelRatio) || 1);
+	const inactive = input.documentHidden === true || input.windowFocused === false;
+	const releaseBackground = inactive && background === "release";
+	const autoBackground = inactive && background !== "keep";
+	let adaptiveFps = 0;
+	let pixelRatioCap = 1.25;
+	let allowExpensiveEffects = true;
+
+	if (quality === "eco") {
+		adaptiveFps = 30;
+		pixelRatioCap = 0.85;
+		allowExpensiveEffects = false;
+	} else if (quality === "balanced") {
+		adaptiveFps = 45;
+		pixelRatioCap = 1;
+	} else if (quality === "ultra") {
+		adaptiveFps = 0;
+		pixelRatioCap = 1.35;
+	}
+
+	if (input.prefersReducedMotion) {
+		adaptiveFps = adaptiveFps ? Math.min(adaptiveFps, 24) : 24;
+		pixelRatioCap = Math.min(pixelRatioCap, 0.9);
+		allowExpensiveEffects = false;
+	}
+	if (autoBackground) {
+		adaptiveFps = releaseBackground ? 4 : Math.min(adaptiveFps || 24, 24);
+		pixelRatioCap = releaseBackground ? 0.75 : Math.min(pixelRatioCap, 0.9);
+		allowExpensiveEffects = false;
+	}
+
+	return {
+		adaptiveFps,
+		pixelRatio: Math.min(devicePixelRatio, pixelRatioCap),
+		bloom: allowExpensiveEffects && fx.bloom === true,
+		aiDepth: allowExpensiveEffects && fx.aiDepth === true,
+		backCover: allowExpensiveEffects && fx.backCover === true,
+	};
+}
+
+function applyRuntimeVisualPerformancePolicy(fx: FxState, policy: RuntimeVisualPerformancePolicy): void {
+	if (!policy.bloom) fx.bloom = false;
+	if (!policy.aiDepth) fx.aiDepth = false;
+	if (!policy.backCover) fx.backCover = false;
+}
+
 export interface StageLyricsHostSupplierRefs {
 	durationMsRef?: RefObject<number | null | undefined>;
 	fallbackTextRef?: RefObject<string>;
@@ -929,7 +995,31 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 				frameSource,
 				prefersReducedMotion,
 			});
-			const renderer = await createRenderer(host, {});
+			const readRuntimeFx = (): FxState => mergeFxState(mergeFxState(cloneFxState(), refs.fxDefaults), refs.fxRef?.current);
+			const runtimeVisualPerformanceFx: Partial<RuntimeVisualPerformanceFx> = {};
+			const readRuntimeVisualPerformanceFx = (): Partial<RuntimeVisualPerformanceFx> => {
+				const defaults = refs.fxDefaults;
+				const current = refs.fxRef?.current;
+				runtimeVisualPerformanceFx.performanceBackground = current?.performanceBackground ?? defaults?.performanceBackground;
+				runtimeVisualPerformanceFx.performanceQuality = current?.performanceQuality ?? defaults?.performanceQuality;
+				runtimeVisualPerformanceFx.bloom = current?.bloom ?? defaults?.bloom;
+				runtimeVisualPerformanceFx.aiDepth = current?.aiDepth ?? defaults?.aiDepth;
+				runtimeVisualPerformanceFx.backCover = current?.backCover ?? defaults?.backCover;
+				return runtimeVisualPerformanceFx;
+			};
+			const readVisualPerformancePolicy = (): RuntimeVisualPerformancePolicy => resolveRuntimeVisualPerformancePolicy({
+				fx: readRuntimeVisualPerformanceFx(),
+				devicePixelRatio: window.devicePixelRatio,
+				documentHidden: document.visibilityState === "hidden",
+				windowFocused: document.hasFocus?.() ?? true,
+				prefersReducedMotion: prefersReducedMotion(),
+			});
+			const initialVisualPerformancePolicy = readVisualPerformancePolicy();
+			let activeVisualPixelRatio = initialVisualPerformancePolicy.pixelRatio;
+			const renderer = await createRenderer(host, {
+				pixelRatio: initialVisualPerformancePolicy.pixelRatio,
+				powerPreference: initialVisualPerformancePolicy.pixelRatio <= 0.9 ? "low-power" : "high-performance",
+			});
 			if (cancelled || disposedRef.current) {
 				audioEngine.dispose();
 				frameSource.dispose();
@@ -939,12 +1029,14 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 			const resizeAwareRenderer = {
 				...renderer,
 				resize: (opts?: Parameters<typeof renderer.resize>[0]) => {
-					renderer.resize(opts);
+					const policy = readVisualPerformancePolicy();
+					activeVisualPixelRatio = policy.pixelRatio;
+					renderer.resize({ ...opts, pixelRatio: policy.pixelRatio });
 					refs.lifecycleRef.current?.requestCameraSnap(10);
 				},
 			};
 			const offResize = attachRendererResizeSync(host, resizeAwareRenderer);
-			renderer.resize();
+			resizeAwareRenderer.resize();
 			const cinema = createCinemaCamera({
 				camera: renderer.camera,
 				getCurrentTime: () => refs.positionRef.current / 1000,
@@ -958,7 +1050,8 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 				},
 			});
 			const freeCamera = createDefaultFreeCameraState();
-			const runtimeFx = mergeFxState(mergeFxState(cloneFxState(), refs.fxDefaults), refs.fxRef?.current);
+			const runtimeFx = readRuntimeFx();
+			applyRuntimeVisualPerformancePolicy(runtimeFx, readVisualPerformancePolicy());
 			let latestCoverLyricPalette: LyricPalette | null = null;
 			let lastAppliedLyricPaletteKey = "";
 			const applyStageLyricPalette = () => {
@@ -986,6 +1079,14 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 			let homePresetPreviewEnabled = false;
 			let homePresetPreviewSourcePreset: number | null = null;
 			let syncedCoverUrlVersion = refs.coverUrlVersionRef?.current ?? 0;
+			const syncRendererPerformancePolicy = () => {
+				const policy = readVisualPerformancePolicy();
+				if (Math.abs(policy.pixelRatio - activeVisualPixelRatio) < 0.001) return policy;
+				activeVisualPixelRatio = policy.pixelRatio;
+				renderer.resize({ pixelRatio: policy.pixelRatio });
+				refs.lifecycleRef.current?.requestCameraSnap(10);
+				return policy;
+			};
 			const syncHomeVisualPixelRatio = () => {
 				const pixelRatio = renderer.renderer.getPixelRatio?.() ?? 1;
 				const uniforms = homeVisual.getField().materialUniforms;
@@ -1176,7 +1277,7 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 				pointerTarget,
 				pointerParallax,
 				isMainSceneCoveredBySplash: () => refs.splashActiveRef.current,
-				getAdaptiveFps: () => 0,
+				getAdaptiveFps: () => readVisualPerformancePolicy().adaptiveFps,
 				prefersReducedMotion,
 				onCacheTrim: () => {},
 			});
@@ -1193,6 +1294,8 @@ export function useVisualEngine(refs: VisualEngineRefs): void {
 			});
 			const offHome = renderLoop.registerStep(RenderStepSlot.HomeVisual, (ctx) => {
 				mergeFxState(homeVisual.getFx(), refs.fxRef?.current);
+				const visualPolicy = syncRendererPerformancePolicy();
+				applyRuntimeVisualPerformancePolicy(homeVisual.getFx(), visualPolicy);
 				syncHomeVisualPixelRatio();
 				const uniforms = homeVisual.getField().materialUniforms as Record<string, { value: unknown }>;
 				const currentCoverUrl = refs.coverUrlRef?.current ?? "";
