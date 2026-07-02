@@ -21,8 +21,15 @@ export interface CoverDepthTween {
 	advance(dtSeconds: number): void;
 }
 
+interface CoverDepthScratch {
+	lum: Float32Array;
+	blur: Float32Array;
+	tmp: Float32Array;
+}
+
 const EDGE_SIZE = 256;
 const EDGE_COUNT = EDGE_SIZE * EDGE_SIZE;
+let sharedScratch: CoverDepthScratch | null = null;
 const EDGE_CENTER_BIAS = (() => {
 	const bias = new Float32Array(EDGE_COUNT);
 	for (let y = 0; y < EDGE_SIZE; y++) {
@@ -50,6 +57,17 @@ function defaultCreateCanvas(width: number, height: number): CoverDepthCanvas | 
 	return cv as CoverDepthCanvas;
 }
 
+function getCoverDepthScratch(count: number): CoverDepthScratch {
+	if (!sharedScratch || sharedScratch.lum.length !== count) {
+		sharedScratch = {
+			lum: new Float32Array(count),
+			blur: new Float32Array(count),
+			tmp: new Float32Array(count),
+		};
+	}
+	return sharedScratch;
+}
+
 export function buildEdgeAndDepthCanvas(
 	srcCanvas: CanvasImageSource,
 	opts: { createCanvas?: CoverDepthCanvasFactory } = {},
@@ -68,9 +86,10 @@ export function buildEdgeAndDepthCanvas(
 	sctx.drawImage(srcCanvas, 0, 0, EDGE_SIZE, EDGE_SIZE);
 	const src = sctx.getImageData(0, 0, EDGE_SIZE, EDGE_SIZE).data;
 	const count = EDGE_COUNT;
-	const lum = new Float32Array(count);
-	const blur = new Float32Array(count);
-	const tmp = new Float32Array(count);
+	const scratch = getCoverDepthScratch(count);
+	const lum = scratch.lum;
+	const blur = scratch.blur;
+	const tmp = scratch.tmp;
 
 	for (let i = 0; i < count; i++) {
 		const di = i * 4;

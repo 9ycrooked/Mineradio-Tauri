@@ -803,8 +803,8 @@ function buildReport(results) {
 	rows.push("");
 	rows.push(metricTable([
 		["指标", "优化前", "优化后", "变化"],
-		["depth 单次构建大 Float32Array 次数", baselineRender.coverDepthBuild.largeFloat32Allocations, optimizedRender.coverDepthBuild.largeFloat32Allocations, formatDrop(baselineRender.coverDepthBuild.largeFloat32Allocations, optimizedRender.coverDepthBuild.largeFloat32Allocations)],
-		["depth 单次构建大 Float32Array MiB", formatNumber(bytesToMiB(baselineRender.coverDepthBuild.largeFloat32Bytes), 2), formatNumber(bytesToMiB(optimizedRender.coverDepthBuild.largeFloat32Bytes), 2), formatDrop(baselineRender.coverDepthBuild.largeFloat32Bytes, optimizedRender.coverDepthBuild.largeFloat32Bytes)],
+		["depth 热路径新增大 Float32Array 次数", baselineRender.coverDepthBuild.largeFloat32Allocations, optimizedRender.coverDepthBuild.largeFloat32Allocations, formatDrop(baselineRender.coverDepthBuild.largeFloat32Allocations, optimizedRender.coverDepthBuild.largeFloat32Allocations)],
+		["depth 热路径新增大 Float32Array MiB", formatNumber(bytesToMiB(baselineRender.coverDepthBuild.largeFloat32Bytes), 2), formatNumber(bytesToMiB(optimizedRender.coverDepthBuild.largeFloat32Bytes), 2), formatDrop(baselineRender.coverDepthBuild.largeFloat32Bytes, optimizedRender.coverDepthBuild.largeFloat32Bytes)],
 		["隐藏稳定 sidecar 轮询间隔 ms", baseline.derived.sidecarHiddenPollMs || 24000, optimized.derived.sidecarHiddenPollMs, `${formatNumber(((optimized.derived.sidecarHiddenPollMs / (baseline.derived.sidecarHiddenPollMs || 24000)) - 1) * 100, 1)}% 间隔`],
 		["隐藏稳定 sidecar 轮询频率", formatNumber(60000 / (baseline.derived.sidecarHiddenPollMs || 24000), 2) + "/min", formatNumber(60000 / optimized.derived.sidecarHiddenPollMs, 2) + "/min", formatDrop(60000 / (baseline.derived.sidecarHiddenPollMs || 24000), 60000 / optimized.derived.sidecarHiddenPollMs)],
 		["前端产物总 MiB", formatNumber(bytesToMiB(baseline.dist.totalBytes), 2), formatNumber(bytesToMiB(optimized.dist.totalBytes), 2), formatChange(baseline.dist.totalBytes, optimized.dist.totalBytes)],
@@ -814,13 +814,13 @@ function buildReport(results) {
 	rows.push("## 结论");
 	rows.push("");
 	rows.push(`- 当前优化版在大列表渲染上收益最明显: 队列 rows 下降 ${formatDrop(baselineRender.queuePanel.rowCount, optimizedRender.queuePanel.rowCount)}，歌单详情 rows 下降 ${formatDrop(baselineRender.playlistDetail.rowCount, optimizedRender.playlistDetail.rowCount)}，迷你队列 rows 下降 ${formatDrop(baselineRender.miniQueue.rowCount, optimizedRender.miniQueue.rowCount)}，搜索结果 rows 下降 ${formatDrop(baselineRender.searchResults.rowCount, optimizedRender.searchResults.rowCount)}。`);
-	rows.push(`- Depth 构建单次大 scratch 分配从 ${baselineRender.coverDepthBuild.largeFloat32Allocations} 次降到 ${optimizedRender.coverDepthBuild.largeFloat32Allocations} 次，单次大数组分配下降 ${formatDrop(baselineRender.coverDepthBuild.largeFloat32Bytes, optimizedRender.coverDepthBuild.largeFloat32Bytes)}。`);
+	rows.push(`- Depth 连续构建热路径新增大 scratch 分配从 ${baselineRender.coverDepthBuild.largeFloat32Allocations} 次降到 ${optimizedRender.coverDepthBuild.largeFloat32Allocations} 次，大数组新增分配下降 ${formatDrop(baselineRender.coverDepthBuild.largeFloat32Bytes, optimizedRender.coverDepthBuild.largeFloat32Bytes)}。`);
 	rows.push(`- 隐藏且 ready 的 sidecar 状态轮询频率从 ${formatNumber(60000 / (baseline.derived.sidecarHiddenPollMs || 24000), 2)}/min 降到 ${formatNumber(60000 / optimized.derived.sidecarHiddenPollMs, 2)}/min，稳定后台轮询下降 ${formatDrop(60000 / (baseline.derived.sidecarHiddenPollMs || 24000), 60000 / optimized.derived.sidecarHiddenPollMs)}。`);
 	rows.push("");
 	rows.push("## 下一步优化方向");
 	rows.push("");
 	rows.push("- 把歌词视图和更多播客集合页接入同一个 virtual-list helper，尤其是长歌词和播客节目二级页。");
-	rows.push("- 将 cover depth 的 3 个 scratch buffer 做成 per-worker/per-controller 复用池，进一步减少连续切歌时的 GC 压力。");
+	rows.push("- 继续收敛 cover depth 的临时 canvas 与 ImageData 分配，优先复用归一化 canvas，避免连续切歌时触发额外 GC。");
 	rows.push("- 给 AI depth 增加尺寸/来源维度的 LRU 和失败冷却，避免同封面不同 URL 参数重复估计。");
 	rows.push("- 加一个 CI 可跑的轻量 perf budget，只检查 DOM rows、depth 大数组次数、关键 bundle size，避免性能回退。");
 	rows.push("");
